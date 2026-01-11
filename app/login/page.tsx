@@ -24,17 +24,17 @@ export default function LoginPage() {
             })
 
             if (result?.error) {
-                setError('> ERROR: Invalid credentials')
-                toast.error('Login failed')
+                setError('Email veya şifre hatalı')
+                toast.error('Giriş başarısız')
                 return
             }
 
-            toast.success('Login successful!')
+            toast.success('Giriş başarılı!')
             router.push('/')
             router.refresh()
         } catch (error) {
             console.log(error)
-            setError('> ERROR: Connection failed')
+            setError('Bağlantı hatası')
         } finally {
             setIsLoading(false)
         }
@@ -42,102 +42,74 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-bg-terminal p-4">
-            {/* CRT Scanlines */}
-            <div className="crt-scanlines fixed inset-0 pointer-events-none z-50"></div>
+            <div className="w-full max-w-md bg-bg-card border border-gray-800 rounded-lg p-8">
 
-            {/* Terminal Window */}
-            <div className="w-full max-w-md border-2 border-neon-green bg-bg-terminal animate-slide-up">
-                {/* Terminal Header */}
-                <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-neon-green/30 bg-bg-card">
-                    <span className="w-3 h-3 rounded-full bg-neon-red"></span>
-                    <span className="w-3 h-3 rounded-full bg-neon-amber"></span>
-                    <span className="w-3 h-3 rounded-full bg-neon-green"></span>
-                    <span className="font-mono text-sm text-neon-green ml-2">
-                        terminal://login
-                    </span>
+                {/* Başlık */}
+                <div className="text-center mb-8">
+                    <h1 className="text-2xl font-semibold text-white mb-2">
+                        Giriş Yap
+                    </h1>
+                    <p className="text-sm text-gray-400">
+                        Hesabınıza giriş yapın
+                    </p>
                 </div>
 
-                {/* Terminal Content */}
-                <div className="p-6 space-y-6">
-                    {/* Title */}
-                    <div className="text-center space-y-2">
-                        <h1 className="font-pixel text-xl text-neon-green neon-pulse">
-                            LOGIN
-                        </h1>
-                        <p className="font-mono text-sm text-gray-500">
-                            &gt; Enter your credentials_
-                        </p>
-                    </div>
-
-                    {/* Form */}
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {error && (
-                            <div className="p-3 border-2 border-neon-red bg-neon-red/10 font-mono text-sm text-neon-red">
-                                {error}
-                            </div>
-                        )}
-
-                        {/* Email */}
-                        <div className="space-y-2">
-                            <label className="font-mono text-sm text-neon-amber">
-                                &gt; EMAIL:
-                            </label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="input-retro"
-                                placeholder="user@example.com"
-                                required
-                            />
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {error && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
+                            {error}
                         </div>
+                    )}
 
-                        {/* Password */}
-                        <div className="space-y-2">
-                            <label className="font-mono text-sm text-neon-amber">
-                                &gt; PASSWORD:
-                            </label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="input-retro"
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
-
-                        {/* Submit */}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full py-3 font-pixel text-sm disabled:opacity-50 bg-neon-green text-black hover:bg-neon-cyan transition-colors border-2 border-neon-green"
-                        >
-                            {isLoading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <span className="loading-ascii"></span>
-                                    AUTHENTICATING...
-                                </span>
-                            ) : (
-                                'EXECUTE >> LOGIN'
-                            )}
-                        </button>
-                    </form>
-
-                    {/* Register Link */}
-                    <div className="text-center font-mono text-sm">
-                        <span className="text-gray-500">No account? </span>
-                        <Link href="/register" className="text-neon-cyan hover:text-neon-green transition-colors">
-                            [REGISTER]
-                        </Link>
+                    <div>
+                        <label className="block text-sm text-gray-400 mb-2">
+                            Email
+                        </label>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
+                            placeholder="ornek@email.com"
+                            required
+                        />
                     </div>
 
-                    {/* Back Link */}
-                    <div className="text-center">
-                        <Link href="/" className="font-mono text-xs text-gray-600 hover:text-neon-green transition-colors">
-                            [← BACK TO HOME]
-                        </Link>
+                    <div>
+                        <label className="block text-sm text-gray-400 mb-2">
+                            Şifre
+                        </label>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
+                            placeholder="••••••••"
+                            required
+                        />
                     </div>
+
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-3 bg-neon-green text-black font-semibold rounded hover:bg-neon-green/80 transition-colors disabled:opacity-50"
+                    >
+                        {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+                    </button>
+                </form>
+
+                {/* Linkler */}
+                <div className="mt-6 text-center space-y-3">
+                    <p className="text-sm text-gray-400">
+                        Hesabınız yok mu?{' '}
+                        <Link href="/register" className="text-neon-green hover:underline">
+                            Kayıt Ol
+                        </Link>
+                    </p>
+                    <Link href="/" className="block text-sm text-gray-500 hover:text-white transition-colors">
+                        ← Ana Sayfa
+                    </Link>
                 </div>
             </div>
         </div>

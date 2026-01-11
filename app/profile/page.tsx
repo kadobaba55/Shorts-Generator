@@ -34,7 +34,7 @@ export default function ProfilePage() {
             const data = await res.json()
             setTransactions(data.transactions)
         } catch (error) {
-            toast.error('Failed to load transactions')
+            toast.error('İşlem geçmişi yüklenemedi')
         } finally {
             setIsLoading(false)
         }
@@ -43,10 +43,7 @@ export default function ProfilePage() {
     if (status === 'loading' || isLoading) {
         return (
             <div className="min-h-screen bg-bg-terminal flex items-center justify-center">
-                <div className="font-mono text-neon-green flex items-center gap-3">
-                    <span className="loading-ascii"></span>
-                    LOADING USER DATA...
-                </div>
+                <div className="text-gray-400">Yükleniyor...</div>
             </div>
         )
     }
@@ -57,161 +54,126 @@ export default function ProfilePage() {
     const totalPurchases = transactions.filter(t => t.type === 'PURCHASE').reduce((sum, t) => sum + t.amount, 0)
 
     return (
-        <div className="min-h-screen bg-bg-terminal text-neon-green">
-            {/* CRT Scanlines */}
-            <div className="crt-scanlines fixed inset-0 pointer-events-none z-50"></div>
-
+        <div className="min-h-screen bg-bg-terminal">
             {/* Header */}
-            <header className="border-b-2 border-neon-green/30 bg-bg-card/80">
+            <header className="border-b border-gray-800 bg-bg-card">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-                    <Link href="/" className="w-8 h-8 border-2 border-neon-green flex items-center justify-center hover:bg-neon-green/10 transition-all">
-                        <span className="text-neon-green font-mono text-lg">▶</span>
+                    <Link href="/" className="text-neon-green font-semibold">
+                        ← Ana Sayfa
                     </Link>
-                    <div className="font-mono text-sm text-neon-amber">
-                        [ USER PROFILE ]
-                    </div>
-                    <Link href="/" className="font-mono text-xs text-neon-green hover:text-neon-cyan transition-colors">
-                        [← HOME]
-                    </Link>
+                    <h1 className="text-white font-semibold">Profil</h1>
+                    <button
+                        onClick={() => signOut({ callbackUrl: '/' })}
+                        className="text-sm text-red-400 hover:text-red-300"
+                    >
+                        Çıkış Yap
+                    </button>
                 </div>
             </header>
 
-            <div className="container mx-auto px-4 py-8 max-w-6xl">
+            <div className="container mx-auto px-4 py-8 max-w-4xl">
                 <div className="grid lg:grid-cols-3 gap-6">
-                    {/* Left Column - Profile Info */}
+
+                    {/* Sol Kolon - Profil Bilgisi */}
                     <div className="lg:col-span-1 space-y-6">
-                        {/* Profile Card */}
-                        <div className="border-2 border-neon-green">
-                            <div className="px-4 py-3 border-b-2 border-neon-green/30 bg-bg-card">
-                                <span className="font-mono text-sm text-neon-amber">&gt; USER_INFO</span>
-                            </div>
-                            <div className="p-4 space-y-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 border-2 border-neon-green flex items-center justify-center font-pixel text-xl text-neon-green">
-                                        {session.user?.name?.[0] || session.user?.email?.[0] || 'U'}
-                                    </div>
-                                    <div className="flex-1 font-mono">
-                                        <div className="text-neon-green">{session.user?.name || 'User'}</div>
-                                        <div className="text-xs text-gray-500">{session.user?.email}</div>
-                                    </div>
+                        {/* Profil Kartı */}
+                        <div className="bg-bg-card border border-gray-800 rounded-lg p-6">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="w-16 h-16 bg-neon-green/20 border border-neon-green rounded-full flex items-center justify-center text-2xl font-semibold text-neon-green">
+                                    {session.user?.name?.[0] || session.user?.email?.[0] || 'U'}
                                 </div>
-
-                                <div className="pt-4 border-t border-neon-green/30 space-y-3">
-                                    {/* Subscription Plan */}
-                                    <div className="flex items-center justify-between font-mono text-sm">
-                                        <span className="text-gray-500">PLAN:</span>
-                                        <span className={`px-2 py-1 border text-xs ${(session.user as any)?.subscriptionPlan === 'PROFESSIONAL'
-                                                ? 'border-neon-cyan text-neon-cyan'
-                                                : (session.user as any)?.subscriptionPlan === 'PRO'
-                                                    ? 'border-neon-magenta text-neon-magenta'
-                                                    : 'border-gray-600 text-gray-400'
-                                            }`}>
-                                            {(session.user as any)?.subscriptionPlan || 'FREE'}
-                                        </span>
-                                    </div>
-
-                                    {/* Token Balance */}
-                                    <div className="flex items-center justify-between font-mono text-sm">
-                                        <span className="text-gray-500">TOKENS:</span>
-                                        <span className="font-pixel text-xl text-neon-green">{session.user?.tokens || 0}</span>
-                                    </div>
-
-                                    {/* Upgrade Button */}
-                                    <Link
-                                        href="/pricing"
-                                        className="w-full btn-primary py-2 text-center block text-sm mt-4"
-                                    >
-                                        {(session.user as any)?.subscriptionPlan === 'FREE'
-                                            ? 'UPGRADE PLAN'
-                                            : 'BUY TOKENS'
-                                        }
-                                    </Link>
+                                <div>
+                                    <div className="text-white font-semibold">{session.user?.name || 'Kullanıcı'}</div>
+                                    <div className="text-sm text-gray-400">{session.user?.email}</div>
                                 </div>
                             </div>
+
+                            <div className="space-y-4 pt-4 border-t border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-400 text-sm">Plan:</span>
+                                    <span className="text-white text-sm">{(session.user as any)?.subscriptionPlan || 'Ücretsiz'}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-400 text-sm">Kalan Kredi:</span>
+                                    <span className="text-neon-green font-semibold text-lg">{session.user?.tokens || 0}</span>
+                                </div>
+                            </div>
+
+                            <Link
+                                href="/pricing"
+                                className="block w-full mt-6 py-3 bg-neon-green text-black text-center font-semibold rounded hover:bg-neon-green/80 transition-colors"
+                            >
+                                Kredi Satın Al
+                            </Link>
                         </div>
 
-                        {/* Quick Actions */}
-                        <div className="border-2 border-neon-green">
-                            <div className="px-4 py-3 border-b-2 border-neon-green/30 bg-bg-card">
-                                <span className="font-mono text-sm text-neon-amber">&gt; ACTIONS</span>
-                            </div>
-                            <div className="p-2 space-y-1">
-                                <Link href="/" className="flex items-center gap-3 p-3 font-mono text-sm hover:bg-neon-green/10 transition-colors">
-                                    <span>🎬</span>
-                                    <span>NEW VIDEO</span>
-                                </Link>
-                                <Link href="/history" className="flex items-center gap-3 p-3 font-mono text-sm hover:bg-neon-green/10 transition-colors text-gray-400">
-                                    <span>📊</span>
-                                    <span>HISTORY</span>
-                                </Link>
-                                <button
-                                    onClick={() => signOut({ callbackUrl: '/' })}
-                                    className="w-full flex items-center gap-3 p-3 font-mono text-sm hover:bg-neon-red/10 text-neon-red transition-colors"
-                                >
-                                    <span>🚪</span>
-                                    <span>LOGOUT</span>
-                                </button>
-                            </div>
+                        {/* Hızlı Eylemler */}
+                        <div className="bg-bg-card border border-gray-800 rounded-lg overflow-hidden">
+                            <Link href="/" className="flex items-center gap-3 p-4 hover:bg-gray-800 transition-colors border-b border-gray-700">
+                                <span>🎬</span>
+                                <span className="text-white">Yeni Video</span>
+                            </Link>
+                            <Link href="/pricing" className="flex items-center gap-3 p-4 hover:bg-gray-800 transition-colors">
+                                <span>💳</span>
+                                <span className="text-white">Fiyatlandırma</span>
+                            </Link>
                         </div>
                     </div>
 
-                    {/* Right Column - Stats & Transactions */}
+                    {/* Sağ Kolon - İstatistikler ve İşlemler */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Stats */}
+                        {/* İstatistikler */}
                         <div className="grid grid-cols-3 gap-4">
-                            <div className="border-2 border-neon-green p-4 text-center">
-                                <div className="font-mono text-xs text-neon-amber mb-2">&gt; TOTAL_USAGE</div>
-                                <div className="font-pixel text-2xl text-neon-green">{totalUsage}</div>
+                            <div className="bg-bg-card border border-gray-800 rounded-lg p-4 text-center">
+                                <div className="text-2xl font-bold text-white">{totalUsage}</div>
+                                <div className="text-xs text-gray-400">Kullanım</div>
                             </div>
-                            <div className="border-2 border-neon-cyan p-4 text-center">
-                                <div className="font-mono text-xs text-neon-amber mb-2">&gt; PURCHASED</div>
-                                <div className="font-pixel text-2xl text-neon-cyan">{totalPurchases}</div>
+                            <div className="bg-bg-card border border-gray-800 rounded-lg p-4 text-center">
+                                <div className="text-2xl font-bold text-white">{totalPurchases}</div>
+                                <div className="text-xs text-gray-400">Satın Alınan</div>
                             </div>
-                            <div className="border-2 border-neon-magenta p-4 text-center">
-                                <div className="font-mono text-xs text-neon-amber mb-2">&gt; BALANCE</div>
-                                <div className="font-pixel text-2xl text-neon-magenta">{session.user?.tokens || 0}</div>
+                            <div className="bg-bg-card border border-gray-800 rounded-lg p-4 text-center">
+                                <div className="text-2xl font-bold text-neon-green">{session.user?.tokens || 0}</div>
+                                <div className="text-xs text-gray-400">Bakiye</div>
                             </div>
                         </div>
 
-                        {/* Transaction History */}
-                        <div className="border-2 border-neon-green">
-                            <div className="px-4 py-3 border-b-2 border-neon-green/30 bg-bg-card">
-                                <span className="font-mono text-sm text-neon-amber">&gt; TRANSACTION_LOG [{transactions.length}]</span>
+                        {/* İşlem Geçmişi */}
+                        <div className="bg-bg-card border border-gray-800 rounded-lg overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-700">
+                                <span className="text-white font-semibold">İşlem Geçmişi</span>
                             </div>
                             <div className="overflow-x-auto">
-                                <table className="w-full font-mono text-sm">
-                                    <thead className="border-b border-neon-green/30 text-neon-amber text-xs">
+                                <table className="w-full text-sm">
+                                    <thead className="border-b border-gray-700 text-gray-400">
                                         <tr>
-                                            <th className="px-4 py-3 text-left">DATE</th>
-                                            <th className="px-4 py-3 text-left">TYPE</th>
-                                            <th className="px-4 py-3 text-right">AMOUNT</th>
+                                            <th className="px-4 py-3 text-left">Tarih</th>
+                                            <th className="px-4 py-3 text-left">Tür</th>
+                                            <th className="px-4 py-3 text-right">Miktar</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {transactions.length === 0 ? (
                                             <tr>
-                                                <td colSpan={3} className="px-4 py-8 text-center text-gray-600">
-                                                    &gt; NO_TRANSACTIONS_FOUND
+                                                <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                                                    Henüz işlem yok
                                                 </td>
                                             </tr>
                                         ) : (
                                             transactions.map((transaction) => (
-                                                <tr key={transaction.id} className="border-b border-neon-green/10 hover:bg-neon-green/5 transition-colors">
-                                                    <td className="px-4 py-3 text-gray-500 text-xs">
-                                                        {new Date(transaction.createdAt).toLocaleDateString()}
+                                                <tr key={transaction.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                                                    <td className="px-4 py-3 text-gray-400">
+                                                        {new Date(transaction.createdAt).toLocaleDateString('tr-TR')}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <span className={`px-2 py-1 text-xs border ${transaction.type === 'PURCHASE'
-                                                                ? 'border-neon-green text-neon-green'
-                                                                : transaction.type === 'USAGE'
-                                                                    ? 'border-neon-cyan text-neon-cyan'
-                                                                    : 'border-neon-amber text-neon-amber'
+                                                        <span className={`px-2 py-1 text-xs rounded ${transaction.type === 'PURCHASE'
+                                                                ? 'bg-green-500/20 text-green-400'
+                                                                : 'bg-blue-500/20 text-blue-400'
                                                             }`}>
-                                                            {transaction.type}
+                                                            {transaction.type === 'PURCHASE' ? 'Satın Alma' : 'Kullanım'}
                                                         </span>
                                                     </td>
-                                                    <td className={`px-4 py-3 text-right ${transaction.amount > 0 ? 'text-neon-green' : 'text-neon-red'
-                                                        }`}>
+                                                    <td className={`px-4 py-3 text-right ${transaction.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                                         {transaction.amount > 0 ? '+' : ''}{transaction.amount}
                                                     </td>
                                                 </tr>
@@ -224,15 +186,6 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
-
-            {/* Footer */}
-            <footer className="border-t-2 border-neon-green/30 py-6 mt-20 bg-bg-card/50">
-                <div className="container mx-auto px-4 text-center">
-                    <span className="font-mono text-xs text-gray-600">
-                        SYSTEM ONLINE | Made by <span className="text-neon-green">KADO</span>
-                    </span>
-                </div>
-            </footer>
         </div>
     )
 }
