@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import ffmpeg from 'ffmpeg-static'
 import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
@@ -123,22 +124,36 @@ export async function POST(request: NextRequest) {
                     const fullFilter = vfFilter + fadeFilter
 
                     await new Promise<void>((resolve, reject) => {
+                        console.log('FFmpeg Starting for:', clipOutputPath)
+
+                        if (!ffmpeg) {
+                            reject(new Error('FFmpeg binary not found'))
+                            return
+                        }
+
                         const ffmpegArgs = [
                             '-y', '-ss', clip.start.toString(),
                             '-i', inputPath,
                             '-t', duration.toString(),
                             '-vf', fullFilter,
                             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26', '-threads', '0',
-                            '-pix_fmt', 'yuv420p', // Web uyumluluğu için ŞART
-                            '-movflags', '+faststart', // Web stream için gerekli
-                            '-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100', // Ses düzeltmeleri
+                            '-pix_fmt', 'yuv420p',
+                            '-movflags', '+faststart',
+                            '-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100',
                             clipOutputPath
                         ]
 
-                        const child = spawn('ffmpeg', ffmpegArgs)
+                        // Debug args
+                        console.log('FFmpeg Args:', ffmpegArgs.join(' '))
+
+                        const child = spawn(ffmpeg, ffmpegArgs)
+
+                        let stderrLog = ''
 
                         child.stderr.on('data', (data) => {
                             const output = data.toString()
+                            stderrLog += output.slice(-500) // Keep last 500 chars for error logging
+
                             const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/)
 
                             if (timeMatch) {
@@ -152,11 +167,32 @@ export async function POST(request: NextRequest) {
                         })
 
                         child.on('close', (code) => {
-                            if (code === 0) resolve()
-                            else reject(new Error(`FFmpeg exited with code ${code}`))
+                            if (code === 0) {
+                                // Double check if file exists
+                                if (fs.existsSync(clipOutputPath)) {
+                                    console.log('✅ File created successfully:', clipOutputPath)
+                                    const stats = fs.statSync(clipOutputPath)
+                                    console.log('📦 File size:', stats.size)
+                                    if (stats.size === 0) {
+                                        reject(new Error('File created but size is 0 bytes'))
+                                    } else {
+                                        resolve()
+                                    }
+                                } else {
+                                    console.error('❌ File NOT found after ffmpeg finished:', clipOutputPath)
+                                    reject(new Error('FFmpeg finished but file not found'))
+                                }
+                            } else {
+                                console.error(`FFmpeg failed with code ${code}`)
+                                console.error('Last stderr:', stderrLog)
+                                reject(new Error(`FFmpeg exited with code ${code}`))
+                            }
                         })
 
-                        child.on('error', (err) => reject(err))
+                        child.on('error', (err) => {
+                            console.error('Spawn error:', err)
+                            reject(err)
+                        })
                     })
 
                     processedClips.push(`/output/${outputId}_clip_${i + 1}.mp4`)

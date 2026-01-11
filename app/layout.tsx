@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
 import { Toaster } from 'react-hot-toast'
+import packageJson from '../package.json'
 
 export const viewport: Viewport = {
     width: 'device-width',
@@ -107,6 +108,11 @@ export default function RootLayout({
                         }}
                     />
                 </AuthProvider>
+
+                {/* Version Indicator */}
+                <div className="fixed bottom-2 right-4 text-[10px] text-gray-700 font-mono pointer-events-none select-none z-50 opacity-50 hover:opacity-100 transition-opacity">
+                    v{packageJson.version}
+                </div>
             </body>
         </html>
     )
