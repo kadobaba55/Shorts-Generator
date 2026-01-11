@@ -100,6 +100,28 @@ export default function AdminPage() {
         }
     }
 
+    const handleDeleteUser = async (userId: string, userName: string) => {
+        if (!confirm(`${userName} kullanıcısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return
+
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            })
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || 'Delete failed')
+            }
+
+            toast.success('Kullanıcı silindi')
+            fetchUsers()
+        } catch (error: any) {
+            toast.error(error.message || 'Silme başarısız')
+        }
+    }
+
     const totalTokens = users.reduce((acc, user) => acc + user.tokens, 0)
     const totalUsage = users.reduce((acc, user) => acc + user.usageCount, 0)
 
@@ -241,6 +263,7 @@ export default function AdminPage() {
                                     <th className="py-3 px-4 text-left">TOKENS</th>
                                     <th className="py-3 px-4 text-left">USAGE</th>
                                     <th className="py-3 px-4 text-left">JOINED</th>
+                                    <th className="py-3 px-4 text-right">ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -280,6 +303,15 @@ export default function AdminPage() {
                                         </td>
                                         <td className="py-3 px-4 text-gray-500">
                                             {new Date(user.createdAt).toLocaleDateString('tr-TR')}
+                                        </td>
+                                        <td className="py-3 px-4 text-right">
+                                            <button
+                                                onClick={() => handleDeleteUser(user.id, user.name || 'User')}
+                                                disabled={session?.user?.email === user.email}
+                                                className="text-xs px-2 py-1 border border-red-900 text-red-500 hover:bg-red-900/20 hover:text-red-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded"
+                                            >
+                                                TERMINATE
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
