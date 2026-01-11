@@ -3,6 +3,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
+import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
 const execAsync = promisify(exec)
 
@@ -21,7 +22,8 @@ interface HeatmapPoint {
 
 export async function POST(request: NextRequest) {
     try {
-        const { videoPath, clipCount = 3, clipDuration = 30, youtubeUrl } = await request.json()
+        const body = await request.json()
+        const { videoPath, clipCount = 3, clipDuration = 30, youtubeUrl } = body
 
         if (!videoPath) {
             return NextResponse.json(
@@ -39,134 +41,198 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Get video duration
-        const durationCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`
-        const { stdout: durationStr } = await execAsync(durationCmd)
-        const totalDuration = parseFloat(durationStr.trim())
+        // Job Creation
+        const job = createJob('analyze')
+        const { canStart, position } = enqueueJob(job.id, 'analyze')
 
-        let selectedClips: AnalysisResult[] = []
-        let analysisMethod = 'audio'
-        let heatmapWarning = ''
+        // Background Analysis
+        const startAnalysis = async () => {
+            // Wait in queue if needed
+            if (!canStart) {
+                updateJob(job.id, {
+                    status: 'queued',
+                    message: `Analiz sırası bekleniyor... (${position}. sıra)`,
+                    queuePosition: position
+                })
 
-        // Try to get YouTube heatmap data if URL is provided
-        if (youtubeUrl) {
+                // Poll until this job can start
+                await new Promise<void>((resolve) => {
+                    const checkInterval = setInterval(() => {
+                        const currentJob = require('@/lib/jobs').getJob(job.id)
+                        if (currentJob?.status === 'processing') {
+                            clearInterval(checkInterval)
+                            resolve()
+                        }
+                    }, 1000)
+                })
+            }
+
+            updateJob(job.id, { status: 'processing', message: 'Video analiz ediliyor...', queuePosition: undefined })
+
             try {
-                const heatmapCmd = `python -m yt_dlp --dump-json "${youtubeUrl}"`
-                const { stdout: videoJson } = await execAsync(heatmapCmd, { maxBuffer: 50 * 1024 * 1024 })
-                const videoData = JSON.parse(videoJson)
+                // Get video duration
+                const durationCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`
+                const { stdout: durationStr } = await execAsync(durationCmd)
+                const totalDuration = parseFloat(durationStr.trim())
 
-                // Check for heatmap data
-                const heatmap: HeatmapPoint[] = videoData.heatmap || []
+                let selectedClips: AnalysisResult[] = []
+                let analysisMethod = 'audio'
+                let heatmapWarning = ''
 
-                if (heatmap.length > 0) {
-                    analysisMethod = 'engagement'
+                // Try to get YouTube heatmap data if URL is provided
+                if (youtubeUrl) {
+                    try {
+                        updateJob(job.id, { message: 'YouTube verileri inceleniyor...' })
+                        const heatmapCmd = `python -m yt_dlp --dump-json "${youtubeUrl}"`
+                        const { stdout: videoJson } = await execAsync(heatmapCmd, { maxBuffer: 50 * 1024 * 1024 })
+                        const videoData = JSON.parse(videoJson)
 
-                    // Find peak engagement points
-                    const sortedHeatmap = [...heatmap].sort((a, b) => b.value - a.value)
+                        // Check for heatmap data
+                        const heatmap: HeatmapPoint[] = videoData.heatmap || []
 
-                    for (const point of sortedHeatmap) {
+                        if (heatmap.length > 0) {
+                            analysisMethod = 'engagement'
+
+                            // Find peak engagement points
+                            const sortedHeatmap = [...heatmap].sort((a, b) => b.value - a.value)
+
+                            for (const point of sortedHeatmap) {
+                                if (selectedClips.length >= clipCount) break
+
+                                const startTime = point.start_time
+                                const endTime = Math.min(startTime + clipDuration, totalDuration)
+
+                                // Check for overlap
+                                const overlaps = selectedClips.some(clip =>
+                                    Math.abs(clip.start - startTime) < clipDuration
+                                )
+
+                                if (!overlaps && startTime < totalDuration - 10) {
+                                    selectedClips.push({
+                                        start: startTime,
+                                        end: endTime,
+                                        score: Math.round(point.value * 100),
+                                        reason: `📊 En çok izlenen (${Math.round(point.value * 100)}% engagement)`
+                                    })
+                                }
+                            }
+                        } else {
+                            heatmapWarning = 'Bu video için izlenme verisi bulunamadı. Ses analizi kullanılıyor.'
+                        }
+                    } catch (e) {
+                        heatmapWarning = 'YouTube verisi alınamadı. Ses analizi kullanılıyor.'
+                    }
+                }
+
+                // Fallback to audio analysis if no heatmap clips found
+                if (selectedClips.length === 0) {
+                    analysisMethod = 'audio'
+                    updateJob(job.id, { message: 'Ses analizi yapılıyor (Bu biraz sürebilir)...' })
+
+                    // Get overall volume stats
+                    const analyzeCmd = `ffmpeg -i "${inputPath}" -af "volumedetect" -vn -sn -dn -f null - 2>&1`
+                    let volumeData: string
+                    try {
+                        const result = await execAsync(analyzeCmd, { maxBuffer: 10 * 1024 * 1024 })
+                        volumeData = result.stderr || result.stdout
+                    } catch (e: any) {
+                        volumeData = e.stderr || e.stdout || ''
+                    }
+
+                    const meanMatch = volumeData.match(/mean_volume:\s*([-\d.]+)\s*dB/)
+                    const meanVolume = meanMatch ? parseFloat(meanMatch[1]) : -20
+
+                    // Analyze audio at intervals
+                    const intervalSeconds = 5
+                    const segments: { time: number; volume: number }[] = []
+                    const totalSegments = Math.ceil((totalDuration - clipDuration) / intervalSeconds)
+                    let processedSegments = 0
+
+                    for (let t = 0; t < totalDuration - clipDuration; t += intervalSeconds) {
+                        const segmentCmd = `ffmpeg -ss ${t} -t ${intervalSeconds} -i "${inputPath}" -af "volumedetect" -vn -sn -dn -f null - 2>&1`
+
+                        try {
+                            const result = await execAsync(segmentCmd, { timeout: 10000 })
+                            const output = result.stderr || result.stdout || ''
+                            const segMeanMatch = output.match(/mean_volume:\s*([-\d.]+)\s*dB/)
+
+                            if (segMeanMatch) {
+                                segments.push({
+                                    time: t,
+                                    volume: parseFloat(segMeanMatch[1])
+                                })
+                            }
+                        } catch (e) {
+                            segments.push({ time: t, volume: meanVolume })
+                        }
+
+                        processedSegments++
+                        // Update progress periodically
+                        if (processedSegments % 5 === 0) {
+                            const progress = Math.round((processedSegments / totalSegments) * 100)
+                            updateJob(job.id, { progress, message: `Ses analizi: %${progress}` })
+                        }
+                    }
+
+                    // Sort by volume (louder = more interesting)
+                    segments.sort((a, b) => b.volume - a.volume)
+
+                    for (const segment of segments) {
                         if (selectedClips.length >= clipCount) break
 
-                        const startTime = point.start_time
-                        const endTime = Math.min(startTime + clipDuration, totalDuration)
-
-                        // Check for overlap
                         const overlaps = selectedClips.some(clip =>
-                            Math.abs(clip.start - startTime) < clipDuration
+                            Math.abs(clip.start - segment.time) < clipDuration
                         )
 
-                        if (!overlaps && startTime < totalDuration - 10) {
+                        if (!overlaps) {
+                            const clipEnd = Math.min(segment.time + clipDuration, totalDuration)
                             selectedClips.push({
-                                start: startTime,
-                                end: endTime,
-                                score: Math.round(point.value * 100),
-                                reason: `📊 En çok izlenen (${Math.round(point.value * 100)}% engagement)`
+                                start: segment.time,
+                                end: clipEnd,
+                                score: Math.round((segment.volume + 50) * 2),
+                                reason: segment.volume > meanVolume + 5 ? '🔊 Yüksek ses seviyesi' :
+                                    segment.volume > meanVolume ? '🔉 Orta ses seviyesi' : '🔈 Normal ses'
                             })
                         }
                     }
-                } else {
-                    heatmapWarning = 'Bu video için izlenme verisi bulunamadı. Ses analizi kullanılıyor.'
                 }
-            } catch (e) {
-                heatmapWarning = 'YouTube verisi alınamadı. Ses analizi kullanılıyor.'
-            }
-        }
 
-        // Fallback to audio analysis if no heatmap clips found
-        if (selectedClips.length === 0) {
-            analysisMethod = 'audio'
+                // Sort by time for display
+                selectedClips.sort((a, b) => a.start - b.start)
 
-            // Get overall volume stats
-            const analyzeCmd = `ffmpeg -i "${inputPath}" -af "volumedetect" -vn -sn -dn -f null - 2>&1`
-            let volumeData: string
-            try {
-                const result = await execAsync(analyzeCmd, { maxBuffer: 10 * 1024 * 1024 })
-                volumeData = result.stderr || result.stdout
-            } catch (e: any) {
-                volumeData = e.stderr || e.stdout || ''
-            }
+                completeJob(job.id, 'analyze')
 
-            const meanMatch = volumeData.match(/mean_volume:\s*([-\d.]+)\s*dB/)
-            const meanVolume = meanMatch ? parseFloat(meanMatch[1]) : -20
-
-            // Analyze audio at intervals
-            const intervalSeconds = 5
-            const segments: { time: number; volume: number }[] = []
-
-            for (let t = 0; t < totalDuration - clipDuration; t += intervalSeconds) {
-                const segmentCmd = `ffmpeg -ss ${t} -t ${intervalSeconds} -i "${inputPath}" -af "volumedetect" -vn -sn -dn -f null - 2>&1`
-
-                try {
-                    const result = await execAsync(segmentCmd, { timeout: 10000 })
-                    const output = result.stderr || result.stdout || ''
-                    const segMeanMatch = output.match(/mean_volume:\s*([-\d.]+)\s*dB/)
-
-                    if (segMeanMatch) {
-                        segments.push({
-                            time: t,
-                            volume: parseFloat(segMeanMatch[1])
-                        })
+                updateJob(job.id, {
+                    status: 'completed',
+                    progress: 100,
+                    result: {
+                        success: true,
+                        totalDuration,
+                        analysisMethod,
+                        clips: selectedClips,
+                        warning: heatmapWarning,
+                        message: analysisMethod === 'engagement'
+                            ? `📊 ${selectedClips.length} popüler an tespit edildi (YouTube verisi)`
+                            : `🔊 ${selectedClips.length} ilgi çekici an tespit edildi (ses analizi)`
                     }
-                } catch (e) {
-                    segments.push({ time: t, volume: meanVolume })
-                }
-            }
+                })
 
-            // Sort by volume (louder = more interesting)
-            segments.sort((a, b) => b.volume - a.volume)
-
-            for (const segment of segments) {
-                if (selectedClips.length >= clipCount) break
-
-                const overlaps = selectedClips.some(clip =>
-                    Math.abs(clip.start - segment.time) < clipDuration
-                )
-
-                if (!overlaps) {
-                    const clipEnd = Math.min(segment.time + clipDuration, totalDuration)
-                    selectedClips.push({
-                        start: segment.time,
-                        end: clipEnd,
-                        score: Math.round((segment.volume + 50) * 2),
-                        reason: segment.volume > meanVolume + 5 ? '🔊 Yüksek ses seviyesi' :
-                            segment.volume > meanVolume ? '🔉 Orta ses seviyesi' : '🔈 Normal ses'
-                    })
-                }
+            } catch (error: any) {
+                console.error('Analysis job error:', error)
+                completeJob(job.id, 'analyze')
+                updateJob(job.id, { status: 'error', error: error.message || 'Analiz hatası' })
             }
         }
 
-        // Sort by time for display
-        selectedClips.sort((a, b) => a.start - b.start)
+        // Fire and forget
+        startAnalysis()
 
         return NextResponse.json({
             success: true,
-            totalDuration,
-            analysisMethod,
-            clips: selectedClips,
-            warning: heatmapWarning,
-            message: analysisMethod === 'engagement'
-                ? `📊 ${selectedClips.length} popüler an tespit edildi (YouTube verisi)`
-                : `🔊 ${selectedClips.length} ilgi çekici an tespit edildi (ses analizi)`
+            jobId: job.id,
+            message: canStart ? 'Analiz başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+            queued: !canStart,
+            queuePosition: position
         })
 
     } catch (error: any) {

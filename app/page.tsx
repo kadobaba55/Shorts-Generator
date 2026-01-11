@@ -159,6 +159,7 @@ export default function Home() {
         console.log('Analyzing video:', videoPath)
         setIsAnalyzing(true)
         setAnalyzeStartTime(Date.now())
+
         // Video süresine göre analiz süresi tahmini
         if (videoInfo) {
             setAnalyzeTotalEstimate(estimateAnalyzeTime(videoInfo.duration))
@@ -173,24 +174,69 @@ export default function Home() {
                 body: JSON.stringify({
                     videoPath: videoPath,
                     clipCount,
-                    clipDuration
+                    clipDuration,
+                    youtubeUrl: url.includes('youtube.com') || url.includes('youtu.be') ? url : undefined
                 })
             })
 
-            if (!res.ok) throw new Error('Analiz hatası')
+            if (!res.ok) {
+                const errorData = await res.json()
+                throw new Error(errorData.error || 'Analiz başlatılamadı')
+            }
 
-            const data = await res.json()
-            setClips(data.clips || [])
-            console.log('Analysis complete:', data.clips)
-            toast.success(`${data.clips?.length || 0} klip bulundu!`)
-            return data.clips || []
+            const { jobId, message } = await res.json()
+            console.log('Analysis started, Job ID:', jobId)
+            toast.loading(message, { id: 'analysis' })
+
+            // Return promise that resolves with clips
+            return new Promise<Clip[]>((resolve, reject) => {
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/status?id=${jobId}`)
+                        if (!statusRes.ok) return
+
+                        const job = await statusRes.json()
+                        // Update ETA if possible
+                        if (job.progress > 0) {
+                            const elapsed = (Date.now() - job.startTime) / 1000
+                            const total = elapsed / (job.progress / 100)
+                            setAnalyzeETA(Math.ceil(total - elapsed) + 's')
+                        }
+
+                        if (job.status === 'processing') {
+                            if (job.queuePosition) {
+                                toast.loading(`Sırada bekleniyor (${job.queuePosition}. sıra)...`, { id: 'analysis' })
+                            } else {
+                                toast.loading(job.message || 'Analiz ediliyor...', { id: 'analysis' })
+                            }
+                        } else if (job.status === 'completed') {
+                            clearInterval(pollInterval)
+                            const resultClips = job.result?.clips || []
+                            setClips(resultClips)
+
+                            toast.success(`${resultClips.length} klip bulundu!`, { id: 'analysis' })
+                            setIsAnalyzing(false)
+                            setAnalyzeETA('')
+                            resolve(resultClips)
+
+                        } else if (job.status === 'error') {
+                            clearInterval(pollInterval)
+                            toast.error(job.error || 'Analiz hatası', { id: 'analysis' })
+                            setIsAnalyzing(false)
+                            reject(new Error(job.error))
+                        }
+                    } catch (e) {
+                        console.error('Polling error:', e)
+                    }
+                }, 1000)
+            })
+
         } catch (error: any) {
             console.error('Analysis error:', error)
-            toast.error(error.message)
-            return []
-        } finally {
+            toast.error(error.message, { id: 'analysis' })
             setIsAnalyzing(false)
             setAnalyzeETA('')
+            return []
         }
     }
 
