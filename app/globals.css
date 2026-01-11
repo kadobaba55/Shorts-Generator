@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-neon-green {
+    color: #00ff00;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 0, 0.5));
+  }
+
+  .border-neon-green {
+    border-color: #00ff00;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+  }
+
+  .bg-neon-green {
+    background-color: #00ff00;
+  }
+
+  .text-neon-cyan {
+    color: #00ffff;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.5));
+  }
+
+  .border-neon-cyan {
+    border-color: #00ffff;
+    box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+  }
+
+  .text-neon-amber {
+    color: #ffbf00;
+    filter: drop-shadow(0 0 8px rgba(255, 191, 0, 0.5));
+  }
+
+  .font-pixel {
+    font-family: 'Press Start 2P', cursive;
+  }
+
+  /* Custom Animations */
+  @keyframes retro-blink {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .animate-retro-blink {
+    animation: retro-blink 1s steps(2) infinite;
+  }
+
+  @keyframes pulse-slow {
+
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+      filter: brightness(1);
+    }
+
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+      filter: brightness(1.2);
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 3s ease-in-out infinite;
+  }
+
+  /* Grid Background Utility */
+  .bg-bg-terminal {
+    background-color: #050505;
+  }
+
+  .debug-grid {
+    background-size: 40px 40px;
+    background-image:
+      linear-gradient(to right, rgba(0, 255, 0, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ff00;
+}

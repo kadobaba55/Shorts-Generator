@@ -1,0 +1,16 @@
+services:
+  app:
+    container_name: tidal_feynman_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # Generated outputs should persist on host
+      - ./public/output:/app/public/output
+      - ./public/temp:/app/public/temp
+    environment:
+      - NODE_ENV=production
+      # Add other env vars here if needed
+    restart: unless-stopped

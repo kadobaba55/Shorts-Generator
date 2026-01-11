@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+.env.local
+public/output
+public/temp
+*.log
+README.md
+task.md
+implementation_plan.md
+production_readiness.md
+walkthrough.md
