@@ -129,7 +129,9 @@ export async function POST(request: NextRequest) {
                             '-t', duration.toString(),
                             '-vf', fullFilter,
                             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26', '-threads', '0',
-                            '-c:a', 'aac', '-b:a', '128k',
+                            '-pix_fmt', 'yuv420p', // Web uyumluluğu için ŞART
+                            '-movflags', '+faststart', // Web stream için gerekli
+                            '-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100', // Ses düzeltmeleri
                             clipOutputPath
                         ]
 
