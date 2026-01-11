@@ -14,10 +14,10 @@ export interface Job {
 
 // Concurrency limits per job type
 const CONCURRENCY_LIMITS: Record<Job['type'], number> = {
-    download: 3,      // 3 simultaneous downloads
-    process: 2,       // 2 simultaneous FFmpeg processes
-    analyze: 2,       // 2 simultaneous analysis
-    subtitle: 1,      // 1 Whisper at a time (CPU intensive)
+    download: 5,      // 5 simultaneous downloads
+    process: 2,       // 2 simultaneous FFmpeg processes (CPU heavy)
+    analyze: 3,       // 3 simultaneous analysis
+    subtitle: 2,      // 2 Whisper at a time (CPU/RAM balanced for e2-medium)
 }
 
 // Global job store
