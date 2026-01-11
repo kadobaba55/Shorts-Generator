@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import os from 'node-os-utils'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -12,9 +11,12 @@ export async function GET() {
     }
 
     try {
-        const cpu = os.cpu
-        const mem = os.mem
-        const drive = os.drive
+        // @ts-ignore
+        const osu = require('node-os-utils')
+        const cpu = osu.cpu
+        const mem = osu.mem
+        const drive = osu.drive
+        const os = osu.os
 
         const cpuUsage = await cpu.usage()
         const memInfo = await mem.info()
@@ -34,7 +36,7 @@ export async function GET() {
                 free: driveInfo.freeGb,
                 percentage: driveInfo.usedPercentage
             },
-            uptime: os.os.uptime()
+            uptime: os.uptime()
         }
 
         return NextResponse.json(stats)
