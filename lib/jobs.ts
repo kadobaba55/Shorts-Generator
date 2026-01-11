@@ -126,9 +126,17 @@ export function removeFromQueue(jobId: string, type: Job['type']) {
     }
 }
 
+import { sendTelegramNotification, formatError } from './telegram'
+
 export function updateJob(id: string, updates: Partial<Job>) {
     const job = jobs.get(id)
     if (job) {
+        // Hata durumunda bildirim gönder
+        if (updates.status === 'error' && updates.error && job.status !== 'error') {
+            const msg = formatError(`Job Failed (${job.type})`, updates.error, { jobId: id })
+            sendTelegramNotification(msg)
+        }
+
         Object.assign(job, { ...updates, updatedAt: Date.now() })
         jobs.set(id, job)
     }
