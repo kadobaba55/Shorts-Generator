@@ -1,0 +1,11 @@
+# Kadostudio - AI Video Klip Oluşturucu
+# https://kadostudio.dev
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://kadostudio.dev/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1

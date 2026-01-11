@@ -12,23 +12,30 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-    title: 'Tidal Feynman - AI Video Alchemist',
-    description: 'Forge viral content from raw video matter using Quantum-AI processing, automatic subtitles, and neural face tracking.',
-    keywords: ['video editing', 'ai', 'viral clips', 'tiktok', 'youtube shorts', 'automation', 'transcription'],
-    authors: [{ name: 'Tidal Feynman Systems' }],
-    metadataBase: new URL('https://tidal-feynman.com'), // Production domain placeholder
+    title: 'Kadostudio - AI Video Klip Oluşturucu',
+    description: 'YouTube videolarından viral TikTok ve YouTube Shorts klipler oluştur. Otomatik altyazı, yüz takibi ve yapay zeka destekli video düzenleme.',
+    keywords: ['video düzenleme', 'ai', 'viral klipler', 'tiktok', 'youtube shorts', 'otomasyon', 'altyazı', 'shorts oluşturucu'],
+    authors: [{ name: 'Kadostudio' }],
+    metadataBase: new URL('https://kadostudio.dev'),
+    icons: {
+        icon: '/logo_final.png',
+        apple: '/logo_final.png',
+    },
     openGraph: {
-        title: 'Tidal Feynman - AI Video Alchemist',
-        description: 'Advanced video transmutation system for creators.',
+        title: 'Kadostudio - AI Video Klip Oluşturucu',
+        description: 'YouTube videolarından viral klipler oluştur. Otomatik altyazı ve yüz takibi.',
         type: 'website',
         locale: 'tr_TR',
-        siteName: 'Tidal Feynman',
+        siteName: 'Kadostudio',
+        url: 'https://kadostudio.dev',
+        images: ['/logo_final.png'],
     },
     twitter: {
         card: 'summary_large_image',
-        title: 'Tidal Feynman',
-        description: 'Quantum-AI powered video processing.',
-        creator: '@tidalfeynman',
+        title: 'Kadostudio',
+        description: 'AI destekli video klip oluşturucu.',
+        creator: '@kadostudio',
+        images: ['/logo_final.png'],
     },
     robots: {
         index: true,
