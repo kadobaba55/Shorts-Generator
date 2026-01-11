@@ -76,7 +76,14 @@ export async function POST(req: NextRequest) {
             updateJob(job.id, { status: 'processing', message: 'Video bilgileri alınıyor...', queuePosition: undefined })
 
             try {
-                const infoCommand = `python -m yt_dlp --dump-json "${url}"`
+                const cookiePath = path.join(process.cwd(), 'cookies.txt')
+                let infoCommand = `python -m yt_dlp --dump-json "${url}"`
+
+                if (fs.existsSync(cookiePath)) {
+                    infoCommand += ` --cookies "${cookiePath}"`
+                    updateJob(job.id, { message: '🍪 Cookie dosyası kullanılıyor...' })
+                }
+
                 const { stdout: infoJson } = await execAsync(infoCommand, { maxBuffer: 50 * 1024 * 1024 })
                 const videoInfo = JSON.parse(infoJson)
 
@@ -84,16 +91,23 @@ export async function POST(req: NextRequest) {
 
                 let errorOutput = ''
 
-                const child = spawn('python', [
+                const args = [
                     '-u',
                     '-m', 'yt_dlp',
                     '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
                     '--merge-output-format', 'mp4',
                     '-o', outputPath,
                     '--newline',
-                    '--no-colors',
-                    url
-                ], {
+                    '--no-colors'
+                ]
+
+                if (fs.existsSync(cookiePath)) {
+                    args.push('--cookies', cookiePath)
+                }
+
+                args.push(url)
+
+                const child = spawn('python', args, {
                     env: { ...process.env, PYTHONUNBUFFERED: '1' }
                 })
 
@@ -199,7 +213,13 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const infoCommand = `python -m yt_dlp --dump-json "${url}"`
+        const cookiePath = path.join(process.cwd(), 'cookies.txt')
+        let infoCommand = `python -m yt_dlp --dump-json "${url}"`
+
+        if (fs.existsSync(cookiePath)) {
+            infoCommand += ` --cookies "${cookiePath}"`
+        }
+
         const { stdout } = await execAsync(infoCommand, { maxBuffer: 50 * 1024 * 1024 })
         const videoInfo = JSON.parse(stdout)
 

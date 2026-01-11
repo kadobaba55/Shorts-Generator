@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -27,6 +27,10 @@ export default function AdminPage() {
     const [stats, setStats] = useState<any>(null)
     const [statsLoading, setStatsLoading] = useState(true)
 
+    // Cookie State
+    const [cookieStatus, setCookieStatus] = useState<{ exists: boolean, stats?: any } | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
     useEffect(() => {
         if (status === 'loading') return
 
@@ -42,22 +46,26 @@ export default function AdminPage() {
             return
         }
 
-        fetchUsers()
-        fetchStats()
+        // If authenticated and admin, fetch data
+        if (status === 'authenticated' && (session?.user as any)?.role === 'ADMIN') {
+            fetchUsers()
+            fetchStats()
+            fetchCookieStatus()
 
-        // Stats Polling (5s)
-        const statInterval = setInterval(fetchStats, 5000)
-        return () => clearInterval(statInterval)
+            // Stats Polling (5s)
+            const statInterval = setInterval(fetchStats, 5000)
+            return () => clearInterval(statInterval)
+        }
     }, [status, session, router])
 
     const fetchUsers = async () => {
         try {
             const res = await fetch('/api/admin/users')
-            if (!res.ok) throw new Error('Failed to fetch')
+            if (!res.ok) throw new Error('Failed to fetch users')
             const data = await res.json()
             setUsers(data.users)
         } catch (error) {
-            console.error(error)
+            console.error('Users error:', error)
         } finally {
             setIsLoading(false)
         }
@@ -66,14 +74,63 @@ export default function AdminPage() {
     const fetchStats = async () => {
         try {
             const res = await fetch('/api/admin/stats')
-            if (res.ok) {
-                const data = await res.json()
-                setStats(data)
-            }
+            if (!res.ok) throw new Error('Failed to fetch stats')
+            const data = await res.json()
+            setStats(data)
         } catch (error) {
-            console.error('Stats fetch error:', error)
+            console.error('Stats error:', error)
         } finally {
             setStatsLoading(false)
+        }
+    }
+
+    const fetchCookieStatus = async () => {
+        try {
+            const res = await fetch('/api/admin/cookies')
+            const data = await res.json()
+            setCookieStatus(data)
+        } catch (error) {
+            console.error('Cookie status error:', error)
+        }
+    }
+
+    const handleCookieUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            const res = await fetch('/api/admin/cookies', {
+                method: 'POST',
+                body: formData
+            })
+
+            if (!res.ok) throw new Error('Upload failed')
+
+            toast.success('Cookies yüklendi')
+            fetchCookieStatus()
+            if (fileInputRef.current) fileInputRef.current.value = ''
+        } catch (error) {
+            toast.error('Yükleme hatası')
+        }
+    }
+
+    const handleCookieDelete = async () => {
+        if (!confirm('Cookie dosyasını silmek istediğinize emin misiniz?')) return
+
+        try {
+            const res = await fetch('/api/admin/cookies', {
+                method: 'DELETE'
+            })
+
+            if (!res.ok) throw new Error('Delete failed')
+
+            toast.success('Cookies silindi')
+            fetchCookieStatus()
+        } catch (error) {
+            toast.error('Silme hatası')
         }
     }
 
@@ -101,7 +158,9 @@ export default function AdminPage() {
     }
 
     const handleDeleteUser = async (userId: string, userName: string) => {
-        if (!confirm(`${userName} kullanıcısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return
+        if (!confirm(`${userName} kullanıcısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!`)
+        )
+            return
 
         try {
             const res = await fetch('/api/admin/users', {
@@ -119,6 +178,17 @@ export default function AdminPage() {
             fetchUsers()
         } catch (error: any) {
             toast.error(error.message || 'Silme başarısız')
+        }
+    }
+
+    const handleRestart = async () => {
+        if (!confirm('Sunucuyu yeniden başlatmak istediğinize emin misiniz?')) return
+        try {
+            // Gerçek restart endpoint'i olmadığı için simüle ediyoruz veya API eklemeliyiz
+            // Şimdilik sadece toast
+            toast.loading('Yeniden başlatılıyor (Simülasyon)...')
+        } catch (error) {
+            toast.error('Hata')
         }
     }
 
@@ -172,12 +242,12 @@ export default function AdminPage() {
                         {/* CPU */}
                         <div className="bg-bg-card border border-gray-800 p-4 rounded-lg relative overflow-hidden group">
                             <div className="text-xs text-gray-500 mb-1">CPU LOAD</div>
-                            <div className={`text-2xl font-bold ${stats?.cpu > 80 ? 'text-neon-red' : 'text-neon-green'}`}>
-                                {stats ? `%${stats.cpu.toFixed(1)}` : '...'}
+                            <div className={`text-2xl font-bold ${typeof stats?.cpu === 'number' && stats.cpu > 80 ? 'text-neon-red' : 'text-neon-green'}`}>
+                                {stats ? `%${stats.cpu}` : '...'}
                             </div>
                             <div className="h-1 bg-gray-800 mt-2 rounded-full overflow-hidden">
                                 <div
-                                    className={`h-full transition-all duration-500 ${stats?.cpu > 80 ? 'bg-neon-red' : 'bg-neon-green'}`}
+                                    className={`h-full transition-all duration-500 ${typeof stats?.cpu === 'number' && stats.cpu > 80 ? 'bg-neon-red' : 'bg-neon-green'}`}
                                     style={{ width: `${stats?.cpu || 0}%` }}
                                 ></div>
                             </div>
@@ -227,6 +297,48 @@ export default function AdminPage() {
                                 <span className="w-2 h-2 bg-neon-green rounded-full"></span>
                                 ONLINE
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* YouTube Cookies Section */}
+                <div className="mb-8">
+                    <h2 className="text-neon-amber text-sm mb-4 flex items-center gap-2">
+                        &gt; YOUTUBE_COOKIES
+                        <span className={`text-[10px] px-2 py-0.5 rounded border ${cookieStatus?.exists
+                            ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                            : 'border-red-500/30 bg-red-500/10 text-red-400'
+                            }`}>
+                            {cookieStatus?.exists ? 'MOUNTED' : 'MISSING'}
+                        </span>
+                    </h2>
+
+                    <div className="bg-bg-card border border-gray-800 p-6 rounded-lg">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="flex-1">
+                                <p className="text-gray-400 text-xs mb-3">
+                                    "Sign in to confirm you’re not a bot" hatası için gereklidir.
+                                    Tarayıcıdan 'cookies.txt' alıp yükleyin.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        accept=".txt"
+                                        ref={fileInputRef}
+                                        onChange={handleCookieUpload}
+                                        className="text-xs text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-gray-800 file:text-neon-green hover:file:bg-gray-700 cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+
+                            {cookieStatus?.exists && (
+                                <button
+                                    onClick={handleCookieDelete}
+                                    className="text-xs border border-red-900/50 text-red-500 hover:bg-red-900/20 px-3 py-2 rounded transition-colors font-mono"
+                                >
+                                    Remove File
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -282,10 +394,10 @@ export default function AdminPage() {
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`px-2 py-1 rounded border ${user.subscriptionPlan === 'PROFESSIONAL'
-                                                    ? 'border-purple-500/30 text-purple-400 bg-purple-500/10'
-                                                    : user.subscriptionPlan === 'PRO'
-                                                        ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
-                                                        : 'border-gray-600 text-gray-400'
+                                                ? 'border-purple-500/30 text-purple-400 bg-purple-500/10'
+                                                : user.subscriptionPlan === 'PRO'
+                                                    ? 'border-blue-500/30 text-blue-400 bg-blue-500/10'
+                                                    : 'border-gray-600 text-gray-400'
                                                 }`}>
                                                 {user.subscriptionPlan}
                                             </span>

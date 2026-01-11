@@ -83,7 +83,13 @@ export async function POST(request: NextRequest) {
                 if (youtubeUrl) {
                     try {
                         updateJob(job.id, { message: 'YouTube verileri inceleniyor...' })
-                        const heatmapCmd = `python -m yt_dlp --dump-json "${youtubeUrl}"`
+                        const cookiePath = path.join(process.cwd(), 'cookies.txt')
+                        let heatmapCmd = `python -m yt_dlp --dump-json "${youtubeUrl}"`
+
+                        if (fs.existsSync(cookiePath)) {
+                            heatmapCmd += ` --cookies "${cookiePath}"`
+                        }
+
                         const { stdout: videoJson } = await execAsync(heatmapCmd, { maxBuffer: 50 * 1024 * 1024 })
                         const videoData = JSON.parse(videoJson)
 
