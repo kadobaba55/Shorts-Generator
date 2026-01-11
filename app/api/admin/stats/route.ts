@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import os from 'os'
+import fs from 'fs'
 
 export async function GET() {
     const session = await getServerSession(authOptions)
@@ -11,30 +13,51 @@ export async function GET() {
     }
 
     try {
-        // @ts-ignore
-        const osu = require('node-os-utils')
-        const cpu = osu.cpu
-        const mem = osu.mem
-        const drive = osu.drive
-        const os = osu.os
+        const cpus = os.cpus()
+        const totalMem = os.totalmem()
+        const freeMem = os.freemem()
+        const usedMem = totalMem - freeMem
 
-        const cpuUsage = await cpu.usage()
-        const memInfo = await mem.info()
-        const driveInfo = await drive.info('/')
+        // CPU Load (1 min avg) - Basit bir yaklaşım
+        // Load average / Core count * 100
+        const loadAvg = os.loadavg()[0]
+        const cpuPercentage = Math.min(100, Math.round((loadAvg / cpus.length) * 100))
+
+        // Disk (Root path)
+        let diskInfo = { total: 0, used: 0, free: 0, percentage: 0 }
+
+        try {
+            // Node 18+ statfs
+            if (fs.statfsSync) {
+                const stats = fs.statfsSync('/')
+                const total = stats.bsize * stats.blocks
+                const free = stats.bsize * stats.bfree
+                const used = total - free
+
+                diskInfo = {
+                    total: Math.round(total / (1024 * 1024 * 1024)),
+                    used: Math.round(used / (1024 * 1024 * 1024)),
+                    free: Math.round(free / (1024 * 1024 * 1024)),
+                    percentage: Math.round((used / total) * 100)
+                }
+            }
+        } catch (e) {
+            console.error('Disk stat error:', e)
+        }
 
         const stats = {
-            cpu: cpuUsage,
+            cpu: cpuPercentage,
             memory: {
-                total: memInfo.totalMemMb,
-                used: memInfo.usedMemMb,
-                free: memInfo.freeMemMb,
-                percentage: (100 - memInfo.freeMemPercentage).toFixed(2)
+                total: Math.round(totalMem / (1024 * 1024)),
+                used: Math.round(usedMem / (1024 * 1024)),
+                free: Math.round(freeMem / (1024 * 1024)),
+                percentage: ((usedMem / totalMem) * 100).toFixed(2)
             },
             disk: {
-                total: driveInfo.totalGb,
-                used: driveInfo.usedGb,
-                free: driveInfo.freeGb,
-                percentage: driveInfo.usedPercentage
+                total: diskInfo.total,
+                used: diskInfo.used,
+                free: diskInfo.free,
+                percentage: diskInfo.percentage
             },
             uptime: os.uptime()
         }
