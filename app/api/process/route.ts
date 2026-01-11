@@ -6,7 +6,7 @@ import fs from 'fs'
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { createJob, updateJob } from '@/lib/jobs'
+import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
 const execAsync = promisify(exec)
 
@@ -65,9 +65,32 @@ export async function POST(request: NextRequest) {
         const processedClips: string[] = []
         const inputPath = path.join(process.cwd(), 'public', videoPath)
 
+        // Enqueue the job - check if it can start immediately
+        const { canStart, position } = enqueueJob(job.id, 'process')
+
         // Background Processing
         const startProcessing = async () => {
-            updateJob(job.id, { status: 'processing', message: 'Klipler hazırlanıyor...' })
+            // Wait in queue if needed
+            if (!canStart) {
+                updateJob(job.id, {
+                    status: 'queued',
+                    message: `İşlem sırası bekleniyor... (${position}. sıra)`,
+                    queuePosition: position
+                })
+
+                // Poll until this job can start
+                await new Promise<void>((resolve) => {
+                    const checkInterval = setInterval(() => {
+                        const currentJob = require('@/lib/jobs').getJob(job.id)
+                        if (currentJob?.status === 'processing') {
+                            clearInterval(checkInterval)
+                            resolve()
+                        }
+                    }, 1000)
+                })
+            }
+
+            updateJob(job.id, { status: 'processing', message: 'Klipler hazırlanıyor...', queuePosition: undefined })
 
             try {
                 // Process clips sequentially to track progress accurately
@@ -138,6 +161,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Deduct token (database update)
+                // Note: Token is deducted AFTER success. Could also be before.
                 await prisma.$transaction([
                     prisma.transaction.create({
                         data: {
@@ -152,6 +176,8 @@ export async function POST(request: NextRequest) {
                     })
                 ])
 
+                completeJob(job.id, 'process')
+
                 updateJob(job.id, {
                     status: 'completed',
                     progress: 100,
@@ -165,6 +191,7 @@ export async function POST(request: NextRequest) {
 
             } catch (error: any) {
                 console.error('Processing job error:', error)
+                completeJob(job.id, 'process')
                 updateJob(job.id, { status: 'error', error: error.message || 'İşlem hatası' })
             }
         }
@@ -175,7 +202,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             jobId: job.id,
-            message: 'İşlem başlatıldı'
+            message: canStart ? 'işlem başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+            queued: !canStart,
+            queuePosition: position
         })
 
     } catch (error: any) {

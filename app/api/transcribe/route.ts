@@ -13,6 +13,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 import { checkRateLimit } from '@/lib/rateLimit'
+import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
 export async function POST(req: NextRequest) {
     // 1. Rate Limit Check (Whisper pahalı bir işlem, sıkı limit: 10/saat)
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const body = await req.json() // Keep original JSON parsing
+        const body = await req.json()
         const { videoPath, language = 'tr', model = 'tiny' } = body
 
         if (!videoPath) {
@@ -39,79 +40,140 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Video file not found' }, { status: 404 })
         }
 
-        // Generate unique ID
+        // Generate unique ID & Job
         const processId = Date.now().toString()
         const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
+        const job = createJob('subtitle') // 'subtitle' queue uses limit: 1 (Sequential)
 
-        console.log('Starting transcription for:', videoPath)
+        // Enqueue the job
+        const { canStart, position } = enqueueJob(job.id, 'subtitle')
 
-        // Step 1: Extract Audio
-        // Uses -vn (no video), -ac 1 (mono), -ar 16000 (16kHz) for Whisper
-        const extractCmd = `ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`
-        await execAsync(extractCmd)
+        const startTranscription = async () => {
+            // Wait in queue if needed
+            if (!canStart) {
+                updateJob(job.id, {
+                    status: 'queued',
+                    message: `Altyazı sırası bekleniyor... (${position}. sıra)`,
+                    queuePosition: position
+                })
 
-        // Step 2: Run Python Transcription Script
-        const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
+                // Poll until this job can start
+                await new Promise<void>((resolve) => {
+                    const checkInterval = setInterval(() => {
+                        const currentJob = require('@/lib/jobs').getJob(job.id)
+                        if (currentJob?.status === 'processing') {
+                            clearInterval(checkInterval)
+                            resolve()
+                        }
+                    }, 1000)
+                })
+            }
 
-        // Use spawn to capture large JSON output safely
-        const pythonProcess = spawn('python', [
-            scriptPath,
-            audioPath,
-            '--model', model,
-            '--language', language
-        ])
+            updateJob(job.id, { status: 'processing', message: 'Ses ayrıştırılıyor...', queuePosition: undefined })
 
-        let stdoutData = ''
-        let stderrData = ''
+            try {
+                console.log('Starting transcription for:', videoPath)
 
-        const transcriptionResult = await new Promise((resolve, reject) => {
-            pythonProcess.stdout.on('data', (data) => {
-                stdoutData += data.toString()
-            })
+                // Step 1: Extract Audio
+                // Uses -vn (no video), -ac 1 (mono), -ar 16000 (16kHz) for Whisper
+                const extractCmd = `ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`
+                await execAsync(extractCmd)
 
-            pythonProcess.stderr.on('data', (data) => {
-                stderrData += data.toString()
-            })
+                updateJob(job.id, { message: 'Yapay zeka sesi metne dönüştürüyor...' })
 
-            pythonProcess.on('close', (code) => {
-                // Cleanup audio file
-                try { fs.unlinkSync(audioPath) } catch (e) { console.error('Cleanup error:', e) }
+                // Step 2: Run Python Transcription Script
+                const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
 
-                if (code !== 0) {
-                    console.error('Transcription failed:', stderrData)
-                    reject(new Error(stderrData || 'Transcription process failed'))
-                    return
-                }
+                // Use spawn to capture large JSON output safely
+                const pythonProcess = spawn('python', [
+                    scriptPath,
+                    audioPath,
+                    '--model', model,
+                    '--language', language
+                ])
 
-                try {
-                    // Find the last valid JSON in output
-                    const jsonStart = stdoutData.indexOf('{')
-                    const jsonEnd = stdoutData.lastIndexOf('}')
+                let stdoutData = ''
+                let stderrData = ''
 
-                    if (jsonStart === -1 || jsonEnd === -1) {
-                        reject(new Error('Invalid JSON output from script'))
-                        return
-                    }
+                await new Promise<void>((resolve, reject) => {
+                    pythonProcess.stdout.on('data', (data) => {
+                        stdoutData += data.toString()
+                    })
 
-                    const jsonStr = stdoutData.substring(jsonStart, jsonEnd + 1)
-                    const result = JSON.parse(jsonStr)
+                    pythonProcess.stderr.on('data', (data) => {
+                        stderrData += data.toString()
+                    })
 
-                    if (result.error) {
-                        reject(new Error(result.error))
-                        return
-                    }
+                    pythonProcess.on('close', (code) => {
+                        // Cleanup audio file
+                        try { fs.unlinkSync(audioPath) } catch (e) { console.error('Cleanup error:', e) }
 
-                    resolve(result)
-                } catch (e: any) {
-                    reject(new Error(`Failed to parse transcription output: ${e.message}`))
-                }
-            })
+                        // Always release the slot!
+                        completeJob(job.id, 'subtitle')
+
+                        if (code !== 0) {
+                            console.error('Transcription failed:', stderrData)
+                            reject(new Error(stderrData || 'Transcription process failed'))
+                            return
+                        }
+
+                        try {
+                            // Find the last valid JSON in output
+                            const jsonStart = stdoutData.indexOf('{')
+                            const jsonEnd = stdoutData.lastIndexOf('}')
+
+                            if (jsonStart === -1 || jsonEnd === -1) {
+                                reject(new Error('Invalid JSON output from script'))
+                                return
+                            }
+
+                            const jsonStr = stdoutData.substring(jsonStart, jsonEnd + 1)
+                            const result = JSON.parse(jsonStr)
+
+                            if (result.error) {
+                                reject(new Error(result.error))
+                                return
+                            }
+
+                            updateJob(job.id, {
+                                status: 'completed',
+                                progress: 100,
+                                result: result
+                            })
+
+                            resolve()
+                        } catch (e: any) {
+                            reject(new Error(`Failed to parse transcription output: ${e.message}`))
+                        }
+                    })
+                })
+
+            } catch (error: any) {
+                console.error('Transcribe API Error:', error)
+                // Release slot if not already released (safety check handled by completeJob logic if ID missing/duplicate removal ok)
+                // But generally completeJob handles the removal. 
+                // In the catch block above (inside spawn close), we call completeJob.
+                // If error happens BEFORE spawn (e.g. ffmpeg extract), we need to call it here.
+                // To be safe, we can call it here too? No, active.delete returns false if not found. Safe.
+                completeJob(job.id, 'subtitle')
+
+                updateJob(job.id, { status: 'error', error: error.message })
+            }
+        }
+
+        // Fire and forget
+        startTranscription()
+
+        return NextResponse.json({
+            success: true,
+            jobId: job.id,
+            message: canStart ? 'Transkripsiyon başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+            queued: !canStart,
+            queuePosition: position
         })
 
-        return NextResponse.json(transcriptionResult)
-
     } catch (error: any) {
-        console.error('Transcribe API Error:', error)
+        console.error('API Error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
