@@ -10,16 +10,12 @@ const execAsync = promisify(exec)
 const VIDEOS_DIR = path.join(process.cwd(), 'public', 'videos')
 
 import { spawn } from 'child_process'
-import { createJob, updateJob } from '@/lib/jobs'
+import { createJob, updateJob, enqueueJob, completeJob, canStartJob } from '@/lib/jobs'
 import { checkRateLimit } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
     // 1. Rate Limit Check
-    // Gerçek IP'yi almak için x-forwarded-for veya production ortamına göre ayar gerekebilir.
-    // Docker/Local ortamda genellikle '127.0.0.1' görünür.
     const ip = req.headers.get('x-forwarded-for') || 'anonymous'
-
-    // Limit: Saatte 5 indirme
     const rate = checkRateLimit(ip, 5, 60 * 60 * 1000)
 
     if (!rate.success) {
@@ -52,26 +48,45 @@ export async function POST(req: NextRequest) {
         const outputPath = path.join(VIDEOS_DIR, `${videoId}.mp4`)
         const job = createJob('download')
 
-        // Start background process
-        // We use a promise wrapper to handle the spawn cleanly without blocking the response
-        const startDownload = async () => {
-            updateJob(job.id, { status: 'processing', message: 'Video bilgileri alınıyor...' })
+        // Enqueue the job - check if it can start immediately
+        const { canStart, position } = enqueueJob(job.id, 'download')
 
-            // Get video info first (simpler command, synchronous wait is fine for this part as it's fast)
+        // Start background process
+        const startDownload = async () => {
+            // Wait in queue if needed
+            if (!canStart) {
+                updateJob(job.id, {
+                    status: 'queued',
+                    message: `Sırada bekleniyor... (${position}. sıra)`,
+                    queuePosition: position
+                })
+
+                // Poll until this job can start
+                await new Promise<void>((resolve) => {
+                    const checkInterval = setInterval(() => {
+                        const currentJob = require('@/lib/jobs').getJob(job.id)
+                        if (currentJob?.status === 'processing') {
+                            clearInterval(checkInterval)
+                            resolve()
+                        }
+                    }, 1000)
+                })
+            }
+
+            updateJob(job.id, { status: 'processing', message: 'Video bilgileri alınıyor...', queuePosition: undefined })
+
             try {
                 const infoCommand = `python -m yt_dlp --dump-json "${url}"`
                 const { stdout: infoJson } = await execAsync(infoCommand, { maxBuffer: 50 * 1024 * 1024 })
                 const videoInfo = JSON.parse(infoJson)
 
-                // Start generic download
                 updateJob(job.id, { message: `İndiriliyor: ${videoInfo.title.substring(0, 30)}...` })
 
                 let errorOutput = ''
 
-                // Use -u to force unbuffered binary stdout/stderr
                 const child = spawn('python', [
                     '-u',
-                    '-m', 'yt_dlp', // Correct module name uses underscore
+                    '-m', 'yt_dlp',
                     '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
                     '--merge-output-format', 'mp4',
                     '-o', outputPath,
@@ -112,6 +127,9 @@ export async function POST(req: NextRequest) {
                 })
 
                 child.on('close', (code) => {
+                    // Always release the slot when done
+                    completeJob(job.id, 'download')
+
                     if (code === 0) {
                         updateJob(job.id, {
                             status: 'completed',
@@ -131,7 +149,6 @@ export async function POST(req: NextRequest) {
                         let failReason = 'Bilinmeyen hata'
                         if (errorOutput) {
                             const lines = errorOutput.split('\n')
-                            // Try to find specific yt-dlp errors
                             failReason = lines.find(l => l.includes('ERROR:')) ||
                                 lines.find(l => l.includes('Errno')) ||
                                 lines.find(l => l.trim().length > 0 && !l.includes('[download]')) ||
@@ -144,6 +161,7 @@ export async function POST(req: NextRequest) {
 
             } catch (error: any) {
                 console.error('Download setup error:', error)
+                completeJob(job.id, 'download') // Release slot on error
                 updateJob(job.id, { status: 'error', error: error.message || 'Başlatma hatası' })
             }
         }
@@ -151,11 +169,13 @@ export async function POST(req: NextRequest) {
         // Fire and forget
         startDownload()
 
-        // Return job ID immediately
+        // Return job ID immediately with queue info
         return NextResponse.json({
             success: true,
             jobId: job.id,
-            message: 'İndirme başlatıldı'
+            message: canStart ? 'İndirme başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+            queued: !canStart,
+            queuePosition: position
         })
 
     } catch (error: any) {
