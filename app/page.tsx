@@ -409,18 +409,10 @@ export default function Home() {
     }, [isAnalyzing, analyzeStartTime, analyzeTotalEstimate])
 
     return (
-        <main className="min-h-screen bg-bg-terminal text-neon-green relative">
-            {/* Retro Grid Background */}
-            <div className="fixed inset-0 -z-10 pointer-events-none debug-grid opacity-20"></div>
+        <main className="min-h-screen bg-bg-terminal text-white relative">
 
-            {/* CRT Ambient Glow */}
-            <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[40%] h-[40%] bg-neon-green/5 rounded-full blur-[150px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[40%] h-[40%] bg-neon-cyan/5 rounded-full blur-[150px]" />
-            </div>
-
-            {/* Retro Header */}
-            <header className="border-b-2 border-neon-green/30 bg-bg-card/80 backdrop-blur-sm">
+            {/* Header */}
+            <header className="border-b border-gray-800 bg-bg-card">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         {/* Logo Icon */}
@@ -527,14 +519,13 @@ export default function Home() {
                 )}
             </div>
 
-            {/* Retro Footer */}
-            <footer className="border-t-2 border-neon-green/30 py-6 mt-20 bg-bg-card/50">
+            {/* Footer */}
+            <footer className="border-t border-gray-800 py-6 mt-20 bg-bg-card">
                 <div className="container mx-auto px-4">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                            <span className="w-2 h-2 bg-neon-green animate-retro-blink"></span>
                             <span className="font-mono text-xs text-gray-500">
-                                SYSTEM ONLINE | Made by <span className="text-neon-green">KADO</span>
+                                Made by <span className="text-neon-green">KADO</span>
                             </span>
                         </div>
                         <div className="font-mono text-xs text-gray-600">

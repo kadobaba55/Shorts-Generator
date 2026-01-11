@@ -50,8 +50,8 @@ module.exports = {
                 }
             },
             fontFamily: {
-                'pixel': ['"Press Start 2P"', 'cursive'],
-                'terminal': ['VT323', 'monospace'],
+                'pixel': ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
+                'terminal': ['JetBrains Mono', 'Consolas', 'monospace'],
                 'mono': ['"JetBrains Mono"', '"Space Mono"', 'Consolas', 'monospace'],
             },
             animation: {
