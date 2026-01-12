@@ -124,12 +124,16 @@ export async function POST(request: NextRequest) {
                     const fullFilter = vfFilter + fadeFilter
 
                     await new Promise<void>((resolve, reject) => {
-                        console.log('FFmpeg Starting for:', clipOutputPath)
-
-                        if (!ffmpeg) {
-                            reject(new Error('FFmpeg binary not found'))
-                            return
+                        // Determine FFmpeg path (fallback to system ffmpeg if static not found)
+                        let ffmpegPath = ffmpeg
+                        // If ffmpeg-static returns null or file doesn't exist, use system 'ffmpeg'
+                        if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
+                            console.warn('⚠️ FFmpeg static binary not found, using system ffmpeg')
+                            ffmpegPath = 'ffmpeg' // Assumes ffmpeg is installed via apt/yum
                         }
+
+                        console.log('FFmpeg Path:', ffmpegPath)
+                        console.log('FFmpeg Starting for:', clipOutputPath)
 
                         const ffmpegArgs = [
                             '-y', '-ss', clip.start.toString(),
@@ -146,7 +150,7 @@ export async function POST(request: NextRequest) {
                         // Debug args
                         console.log('FFmpeg Args:', ffmpegArgs.join(' '))
 
-                        const child = spawn(ffmpeg, ffmpegArgs)
+                        const child = spawn(ffmpegPath, ffmpegArgs)
 
                         let stderrLog = ''
 
