@@ -334,15 +334,7 @@ export default function VideoEditor({
                                 ))}
                             </div>
 
-                            {/* Batch Actions */}
-                            <div className="pt-2 md:pt-3 border-t border-gray-700">
-                                <button
-                                    onClick={onAddSubtitlesToAll}
-                                    className="w-full btn-secondary py-2 text-xs"
-                                >
-                                    [+ SUB ALL]
-                                </button>
-                            </div>
+
                         </div>
 
                         {/* Center: Video Preview */}
