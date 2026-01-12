@@ -443,7 +443,7 @@ export default function VideoEditor({
                                 <div className="flex gap-2 lg:hidden">
                                     {selectedClip && !selectedClip.hasSubtitles && (
                                         <button
-                                            onClick={() => onAddSubtitles(selectedClipIndex)}
+                                            onClick={() => handleOpenSubtitleEditor(selectedClipIndex)}
                                             disabled={selectedClip.isProcessing}
                                             className="flex-1 btn-primary py-2 text-xs disabled:opacity-50"
                                         >
