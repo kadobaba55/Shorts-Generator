@@ -16,7 +16,7 @@ import { checkRateLimit } from '@/lib/rateLimit'
 export async function POST(req: NextRequest) {
     // 1. Rate Limit Check
     const ip = req.headers.get('x-forwarded-for') || 'anonymous'
-    const rate = checkRateLimit(ip, 5, 60 * 60 * 1000)
+    const rate = checkRateLimit(ip, 50, 60 * 60 * 1000)
 
     if (!rate.success) {
         return NextResponse.json(
