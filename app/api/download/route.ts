@@ -94,8 +94,8 @@ export async function POST(req: NextRequest) {
                 const args = [
                     '-u',
                     '-m', 'yt_dlp',
-                    '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-                    '--merge-output-format', 'mp4',
+                    '-f', 'best[ext=mp4]/best',
+                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     '-o', outputPath,
                     '--newline',
                     '--no-colors'
