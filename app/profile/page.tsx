@@ -14,18 +14,46 @@ interface Transaction {
 }
 
 export default function ProfilePage() {
-    const { data: session, status } = useSession()
+    const { data: session, status, update } = useSession()
     const router = useRouter()
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [isLoading, setIsLoading] = useState(true)
+
+    // Edit State
+    const [isEditing, setIsEditing] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [editName, setEditName] = useState('')
 
     useEffect(() => {
         if (status === 'unauthenticated') {
             router.push('/login')
         } else if (status === 'authenticated') {
             fetchTransactions()
+            setEditName(session.user?.name || '')
         }
-    }, [status, router])
+    }, [status, router, session])
+
+    const handleUpdateProfile = async () => {
+        if (!editName.trim()) return
+        setIsSaving(true)
+        try {
+            const res = await fetch('/api/user/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: editName })
+            })
+
+            if (!res.ok) throw new Error('Güncelleme başarısız')
+
+            await update({ name: editName }) // Session güncelle
+            toast.success('Profil güncellendi')
+            setIsEditing(false)
+        } catch (error) {
+            toast.error('Profil güncellenemedi')
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
     const fetchTransactions = async () => {
         try {
@@ -38,6 +66,39 @@ export default function ProfilePage() {
         } finally {
             setIsLoading(false)
         }
+    }
+
+    // Avatar Component helper
+    const stringToColor = (str: string) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+        return '#' + '00000'.substring(0, 6 - c.length) + c;
+    }
+
+    const getInitials = (name: string) => {
+        const names = name.split(' ')
+        let initials = names[0].substring(0, 1).toUpperCase()
+        if (names.length > 1) {
+            initials += names[names.length - 1].substring(0, 1).toUpperCase()
+        }
+        return initials
+    }
+
+    const Avatar = ({ name, email }: { name: string, email?: string | null }) => {
+        const bgColor = stringToColor(email || name || 'user')
+        const initials = getInitials(name || 'U')
+
+        return (
+            <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-lg border-2 border-white/10"
+                style={{ backgroundColor: bgColor }}
+            >
+                {initials}
+            </div>
+        )
     }
 
     if (status === 'loading' || isLoading) {
@@ -79,13 +140,47 @@ export default function ProfilePage() {
                         {/* Profil Kartı */}
                         <div className="bg-bg-card border border-gray-800 rounded-lg p-6">
                             <div className="flex items-center gap-4 mb-6">
-                                <div className="w-16 h-16 bg-neon-green/20 border border-neon-green rounded-full flex items-center justify-center text-2xl font-semibold text-neon-green">
-                                    {session.user?.name?.[0] || session.user?.email?.[0] || 'U'}
-                                </div>
-                                <div>
-                                    <div className="text-white font-semibold">{session.user?.name || 'Kullanıcı'}</div>
+                                <Avatar
+                                    name={session.user?.name || 'Kullanıcı'}
+                                    email={session.user?.email}
+                                />
+                                <div className="flex-1">
+                                    {isEditing ? (
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:border-neon-green outline-none w-full"
+                                                placeholder="İsim Girin"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="text-white font-semibold text-lg">{session.user?.name || 'Kullanıcı'}</div>
+                                    )}
                                     <div className="text-sm text-gray-400">{session.user?.email}</div>
                                 </div>
+                                <button
+                                    onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
+                                    disabled={isSaving}
+                                    className={`text-xs px-3 py-1 rounded border transition-colors ${isEditing
+                                        ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
+                                        : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
+                                        }`}
+                                >
+                                    {isSaving ? '...' : isEditing ? 'Kaydet' : 'Düzenle'}
+                                </button>
+                                {isEditing && (
+                                    <button
+                                        onClick={() => {
+                                            setIsEditing(false)
+                                            setEditName(session.user?.name || '')
+                                        }}
+                                        className="text-xs px-3 py-1 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                    >
+                                        İptal
+                                    </button>
+                                )}
                             </div>
 
                             <div className="space-y-4 pt-4 border-t border-gray-700">
@@ -167,8 +262,8 @@ export default function ProfilePage() {
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className={`px-2 py-1 text-xs rounded ${transaction.type === 'PURCHASE'
-                                                                ? 'bg-green-500/20 text-green-400'
-                                                                : 'bg-blue-500/20 text-blue-400'
+                                                            ? 'bg-green-500/20 text-green-400'
+                                                            : 'bg-blue-500/20 text-blue-400'
                                                             }`}>
                                                             {transaction.type === 'PURCHASE' ? 'Satın Alma' : 'Kullanım'}
                                                         </span>
