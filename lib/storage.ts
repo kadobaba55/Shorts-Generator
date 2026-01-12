@@ -33,7 +33,7 @@ export async function uploadToStorage(filePath: string, destination: string): Pr
     // Upload options
     const [file] = await bucket.upload(filePath, {
         destination,
-        public: true, // Dosyayı public yap
+        // public: true, // REMOVED: Incompatible with Uniform Bucket Access. Bucket is already public.
         metadata: {
             cacheControl: 'public, max-age=31536000',
         },
