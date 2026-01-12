@@ -10,6 +10,7 @@
     "release": "npm version patch && git push"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "@prisma/client": "^5.10.0",
     "bcryptjs": "^3.0.3",
     "ffmpeg-static": "^5.3.0",

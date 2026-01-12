@@ -195,8 +195,28 @@ export async function POST(request: NextRequest) {
                         })
                     })
 
-                    processedClips.push(`/output/${outputId}_clip_${i + 1}.mp4`)
-                }
+                    // ... Previous FFmpeg code ...
+
+                    // 3. Upload to Google Cloud Storage (If configured)
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { uploadToStorage } = require('@/lib/storage')
+                        const filename = `${outputId}_clip_${i + 1}.mp4`
+                        const gcsUrl = await uploadToStorage(clipOutputPath, filename)
+
+                        console.log('☁️ Uploaded to GCS:', gcsUrl)
+                        processedClips.push(gcsUrl)
+
+                        // Delete local file after upload
+                        fs.unlinkSync(clipOutputPath)
+                    } catch (uploadError: any) {
+                        console.error('⚠️ GCS Upload Failed:', uploadError.message || uploadError)
+                        console.warn('Falling back to local file path')
+                        // Fallback to local file relative path for frontend
+                        // Remove /public/ from path if it exists to make it a valid URL
+                        processedClips.push(`/output/${outputId}_clip_${i + 1}.mp4`)
+                    }
+                } // End loop
 
                 // Deduct token (database update)
                 // Note: Token is deducted AFTER success. Could also be before.
