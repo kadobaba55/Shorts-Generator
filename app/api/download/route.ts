@@ -77,7 +77,8 @@ export async function POST(req: NextRequest) {
 
             try {
                 const cookiePath = path.join(process.cwd(), 'cookies.txt')
-                let infoCommand = `python3 -m yt_dlp --dump-json "${url}"`
+                const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                let infoCommand = `python3 -m yt_dlp --dump-json "${url}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=android"`
 
                 if (fs.existsSync(cookiePath)) {
                     infoCommand += ` --cookies "${cookiePath}"`
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
                     '-m', 'yt_dlp',
                     '-f', 'best[ext=mp4]/best',
                     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    '--extractor-args', 'youtube:player_client=android',
                     '-o', outputPath,
                     '--newline',
                     '--no-colors'
