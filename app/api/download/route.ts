@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
             try {
                 const cookiePath = path.join(process.cwd(), 'cookies.txt')
-                let infoCommand = `python -m yt_dlp --dump-json "${url}"`
+                let infoCommand = `python3 -m yt_dlp --dump-json "${url}"`
 
                 if (fs.existsSync(cookiePath)) {
                     infoCommand += ` --cookies "${cookiePath}"`
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
                 args.push(url)
 
-                const child = spawn('python', args, {
+                const child = spawn('python3', args, {
                     env: { ...process.env, PYTHONUNBUFFERED: '1' }
                 })
 
