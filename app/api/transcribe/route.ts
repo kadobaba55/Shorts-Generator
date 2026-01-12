@@ -96,15 +96,32 @@ export async function POST(req: NextRequest) {
                 let stderrData = ''
 
                 await new Promise<void>((resolve, reject) => {
+                    // Timeout (10 minutes max for transcription)
+                    const timeout = setTimeout(() => {
+                        pythonProcess.kill()
+                        reject(new Error('Transcription process timed out (10 minutes limit)'))
+                    }, 10 * 60 * 1000)
+
                     pythonProcess.stdout.on('data', (data) => {
-                        stdoutData += data.toString()
+                        const str = data.toString()
+                        stdoutData += str
+                        console.log(`[Whisper STDOUT]: ${str.substring(0, 100)}...`) // Log snippet
                     })
 
                     pythonProcess.stderr.on('data', (data) => {
-                        stderrData += data.toString()
+                        const str = data.toString()
+                        stderrData += str
+                        console.log(`[Whisper STDERR]: ${str}`)
+
+                        // Detect model downloading state
+                        if (str.includes('Downloading') || str.includes('%')) {
+                            updateJob(job.id, { message: 'AI Modeli ilk kez indiriliyor (Bu işlem birkaç dakika sürebilir)...' })
+                        }
                     })
 
                     pythonProcess.on('close', (code) => {
+                        clearTimeout(timeout)
+
                         // Cleanup audio file
                         try { fs.unlinkSync(audioPath) } catch (e) { console.error('Cleanup error:', e) }
 
@@ -123,6 +140,7 @@ export async function POST(req: NextRequest) {
                             const jsonEnd = stdoutData.lastIndexOf('}')
 
                             if (jsonStart === -1 || jsonEnd === -1) {
+                                console.error('Invalid JSON Output:', stdoutData)
                                 reject(new Error('Invalid JSON output from script'))
                                 return
                             }
