@@ -139,7 +139,7 @@ export default function ProfilePage() {
                     <div className="lg:col-span-1 space-y-6">
                         {/* Profil Kartı */}
                         <div className="bg-bg-card border border-gray-800 rounded-lg p-6 overflow-hidden">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6">
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                     <div className="flex-shrink-0">
                                         <Avatar
@@ -149,12 +149,12 @@ export default function ProfilePage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         {isEditing ? (
-                                            <div className="flex items-center gap-2 mb-1">
+                                            <div className="flex items-center gap-2 mb-1 w-full max-w-sm">
                                                 <input
                                                     type="text"
                                                     value={editName}
                                                     onChange={(e) => setEditName(e.target.value)}
-                                                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-base focus:border-neon-green outline-none w-full"
+                                                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-base focus:border-neon-green outline-none w-full shadow-sm"
                                                     placeholder="İsim Girin"
                                                     autoFocus
                                                 />
@@ -170,7 +170,7 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 self-end sm:self-center ml-auto">
+                                <div className="flex items-center gap-2 self-start md:self-center md:ml-auto pt-2 md:pt-0">
                                     {isEditing && (
                                         <button
                                             onClick={() => {
@@ -186,8 +186,8 @@ export default function ProfilePage() {
                                         onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
                                         disabled={isSaving}
                                         className={`text-xs px-4 py-2 rounded border transition-colors whitespace-nowrap font-semibold ${isEditing
-                                                ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
-                                                : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
+                                            ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
+                                            : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
                                             }`}
                                     >
                                         {isSaving ? 'Kaydediliyor...' : isEditing ? 'Kaydet' : 'Düzenle'}
@@ -230,7 +230,7 @@ export default function ProfilePage() {
                     {/* Sağ Kolon - İstatistikler ve İşlemler */}
                     <div className="lg:col-span-2 space-y-6">
                         {/* İstatistikler */}
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="bg-bg-card border border-gray-800 rounded-lg p-4 text-center">
                                 <div className="text-2xl font-bold text-white">{totalUsage}</div>
                                 <div className="text-xs text-gray-400">Kullanım</div>
