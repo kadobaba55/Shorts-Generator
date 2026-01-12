@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
             videoPath,
             segments, // Expecting array of {id, start, end, text}
             style = 'viral',
+            font = 'Impact',
+            primaryColor = '#00FFFF',
             addEmojis = false,
             highlightKeywords = false
         } = body
@@ -127,17 +129,32 @@ export async function POST(request: NextRequest) {
         fs.writeFileSync(srtPath, srtContent, 'utf-8')
         console.log('SRT generated at:', srtPath)
 
-        // Step 2: Burn subtitles
-        // Viral-style subtitle styling remains same
-        const styles: { [key: string]: string } = {
-            'classic': 'FontName=Impact,FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,Outline=3,Shadow=2,Bold=1,Alignment=2,MarginV=50',
-            'neon': 'FontName=Arial Black,FontSize=30,PrimaryColour=&H00FFFF&,SecondaryColour=&HFF00FF&,OutlineColour=&H000000&,Outline=4,Shadow=0,Bold=1,Alignment=2,MarginV=50',
-            'box': 'FontName=Roboto,FontSize=26,PrimaryColour=&HFFFFFF&,BackColour=&H80000000&,Outline=0,Shadow=0,BorderStyle=4,Bold=1,Alignment=2,MarginV=50',
-            'viral': 'FontName=Impact,FontSize=32,PrimaryColour=&H00FFFF&,OutlineColour=&H000000&,Outline=4,Shadow=3,Bold=1,Alignment=2,MarginV=60',
-            'minimal': 'FontName=Arial,FontSize=24,PrimaryColour=&HFFFFFF&,OutlineColour=&H404040&,Outline=2,Shadow=1,Alignment=2,MarginV=40'
+        // Step 2: Convert hex color to ASS format (BBGGRR with &H prefix)
+        const hexToAss = (hex: string): string => {
+            const clean = hex.replace('#', '')
+            const r = clean.substring(0, 2)
+            const g = clean.substring(2, 4)
+            const b = clean.substring(4, 6)
+            return `&H${b}${g}${r}&`
         }
 
-        const subtitleStyle = styles[style] || styles['viral']
+        // Build custom style from frontend parameters
+        const primaryColorAss = hexToAss(primaryColor)
+        const customStyle = `FontName=${font},FontSize=32,PrimaryColour=${primaryColorAss},OutlineColour=&H000000&,Outline=4,Shadow=3,Bold=1,Alignment=2,MarginV=60`
+
+        // Fallback to preset styles
+        const styles: { [key: string]: string } = {
+            'classic': 'FontName=Impact,FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,Outline=3,Shadow=2,Bold=1,Alignment=2,MarginV=50',
+            'neon': 'FontName=Arial Black,FontSize=30,PrimaryColour=&HFF00FF&,SecondaryColour=&HFFFF00&,OutlineColour=&H000000&,Outline=4,Shadow=0,Bold=1,Alignment=2,MarginV=50',
+            'box': 'FontName=Roboto,FontSize=26,PrimaryColour=&HFFFFFF&,BackColour=&H80000000&,Outline=0,Shadow=0,BorderStyle=4,Bold=1,Alignment=2,MarginV=50',
+            'viral': customStyle,  // Use custom style for viral
+            'minimal': 'FontName=Arial,FontSize=24,PrimaryColour=&HFFFFFF&,OutlineColour=&H404040&,Outline=2,Shadow=1,Alignment=2,MarginV=40',
+            'karaoke': 'FontName=Comic Sans MS,FontSize=28,PrimaryColour=&H00D7FF&,OutlineColour=&H000000&,Outline=3,Shadow=2,Bold=1,Alignment=2,MarginV=50'
+        }
+
+        // If custom font/color provided, always use custom style
+        const subtitleStyle = (font !== 'Impact' || primaryColor !== '#00FFFF') ? customStyle : (styles[style] || styles['viral'])
+
         // Windows path escape specifically for FFmpeg subtitles filter
         // We need to use forward slashes and escape colon
         const escapedSrtPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:')

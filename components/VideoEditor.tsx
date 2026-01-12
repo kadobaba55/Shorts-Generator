@@ -57,7 +57,7 @@ export default function VideoEditor({
         setIsSubtitleEditorOpen(true)
     }
 
-    const handleSaveSubtitles = async (segments: any[]) => {
+    const handleSaveSubtitles = async (segments: any[], style?: any) => {
         if (editingClipIndex === null) return
 
         const clip = processedClips[editingClipIndex]
@@ -68,14 +68,16 @@ export default function VideoEditor({
         setProcessedClips(updatedClips)
 
         try {
-            // Use new subtitle endpoint that burns segments
+            // Use new subtitle endpoint that burns segments with custom style
             const res = await fetch('/api/subtitle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     videoPath: clip.videoPath,
                     segments: segments,
-                    style: 'viral',
+                    style: style?.id || 'viral',
+                    font: style?.font || 'Impact',
+                    primaryColor: style?.primaryColor || '#00FFFF',
                     addEmojis: true,
                     highlightKeywords: true
                 })
@@ -93,6 +95,7 @@ export default function VideoEditor({
                 hasSubtitles: true
             }
             setProcessedClips(finalClips)
+            setIsSubtitleEditorOpen(false)
 
         } catch (error) {
             console.error(error)
