@@ -138,15 +138,17 @@ export default function ProfilePage() {
                     {/* Sol Kolon - Profil Bilgisi */}
                     <div className="lg:col-span-1 space-y-6">
                         {/* Profil Kartı */}
-                        <div className="bg-bg-card border border-gray-800 rounded-lg p-6">
-                            <div className="flex items-center gap-4 mb-6">
-                                <Avatar
-                                    name={session.user?.name || 'Kullanıcı'}
-                                    email={session.user?.email}
-                                />
-                                <div className="flex-1">
+                        <div className="bg-bg-card border border-gray-800 rounded-lg p-6 overflow-hidden">
+                            <div className="flex items-center gap-4 mb-6 relative">
+                                <div className="flex-shrink-0">
+                                    <Avatar
+                                        name={session.user?.name || 'Kullanıcı'}
+                                        email={session.user?.email}
+                                    />
+                                </div>
+                                <div className="flex-1 min-w-0">
                                     {isEditing ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 mb-1">
                                             <input
                                                 type="text"
                                                 value={editName}
@@ -156,16 +158,20 @@ export default function ProfilePage() {
                                             />
                                         </div>
                                     ) : (
-                                        <div className="text-white font-semibold text-lg">{session.user?.name || 'Kullanıcı'}</div>
+                                        <div className="text-white font-semibold text-lg truncate pr-2" title={session.user?.name || 'Kullanıcı'}>
+                                            {session.user?.name || 'Kullanıcı'}
+                                        </div>
                                     )}
-                                    <div className="text-sm text-gray-400">{session.user?.email}</div>
+                                    <div className="text-sm text-gray-400 truncate" title={session.user?.email || ''}>
+                                        {session.user?.email}
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
                                     disabled={isSaving}
-                                    className={`text-xs px-3 py-1 rounded border transition-colors ${isEditing
-                                        ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
-                                        : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
+                                    className={`absolute top-0 right-0 lg:static flex-shrink-0 text-xs px-3 py-1 rounded border transition-colors whitespace-nowrap ${isEditing
+                                            ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
+                                            : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
                                         }`}
                                 >
                                     {isSaving ? '...' : isEditing ? 'Kaydet' : 'Düzenle'}
@@ -176,7 +182,7 @@ export default function ProfilePage() {
                                             setIsEditing(false)
                                             setEditName(session.user?.name || '')
                                         }}
-                                        className="text-xs px-3 py-1 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                        className="absolute right-16 top-0 lg:static text-xs px-3 py-1 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10"
                                     >
                                         İptal
                                     </button>
