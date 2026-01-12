@@ -43,3 +43,4 @@ temp/
 *.avi
 
 /app/generated/prisma
+version.json

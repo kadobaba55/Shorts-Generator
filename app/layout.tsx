@@ -51,6 +51,15 @@ export const metadata: Metadata = {
     },
 }
 
+// Try to import generated version, fallback to package.json
+let appVersion = packageJson.version
+try {
+    const versionData = require('../version.json')
+    appVersion = versionData.version
+} catch (e) {
+    // version.json might not exist in dev before first run
+}
+
 export default function RootLayout({
     children,
 }: {
@@ -111,7 +120,7 @@ export default function RootLayout({
 
                 {/* Version Indicator */}
                 <div className="fixed bottom-2 right-4 text-[10px] text-gray-700 font-mono pointer-events-none select-none z-50 opacity-50 hover:opacity-100 transition-opacity">
-                    v{packageJson.version}
+                    v{appVersion}
                 </div>
             </body>
         </html>
