@@ -71,8 +71,40 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                 throw new Error(err.error || 'Transcribe failed')
             }
 
-            const data = await res.json()
-            setSegments(data.segments)
+            const { jobId } = await res.json()
+
+            // Poll for job completion
+            const pollForResult = async (): Promise<SubtitleSegment[]> => {
+                return new Promise((resolve, reject) => {
+                    const interval = setInterval(async () => {
+                        try {
+                            const statusRes = await fetch(`/api/status?id=${jobId}`)
+                            if (!statusRes.ok) return
+
+                            const job = await statusRes.json()
+
+                            if (job.status === 'completed' && job.result?.segments) {
+                                clearInterval(interval)
+                                resolve(job.result.segments)
+                            } else if (job.status === 'error') {
+                                clearInterval(interval)
+                                reject(new Error(job.error || 'Transcription failed'))
+                            }
+                        } catch (e) {
+                            console.error('Polling error:', e)
+                        }
+                    }, 1000)
+
+                    // Timeout after 5 minutes
+                    setTimeout(() => {
+                        clearInterval(interval)
+                        reject(new Error('Transcription timed out'))
+                    }, 5 * 60 * 1000)
+                })
+            }
+
+            const segments = await pollForResult()
+            setSegments(segments)
             setCurrentStep('edit')
         } catch (error) {
             console.error(error)
