@@ -139,54 +139,60 @@ export default function ProfilePage() {
                     <div className="lg:col-span-1 space-y-6">
                         {/* Profil Kartı */}
                         <div className="bg-bg-card border border-gray-800 rounded-lg p-6 overflow-hidden">
-                            <div className="flex items-center gap-4 mb-6 relative">
-                                <div className="flex-shrink-0">
-                                    <Avatar
-                                        name={session.user?.name || 'Kullanıcı'}
-                                        email={session.user?.email}
-                                    />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    {isEditing ? (
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <input
-                                                type="text"
-                                                value={editName}
-                                                onChange={(e) => setEditName(e.target.value)}
-                                                className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:border-neon-green outline-none w-full"
-                                                placeholder="İsim Girin"
-                                            />
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    <div className="flex-shrink-0">
+                                        <Avatar
+                                            name={session.user?.name || 'Kullanıcı'}
+                                            email={session.user?.email}
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        {isEditing ? (
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <input
+                                                    type="text"
+                                                    value={editName}
+                                                    onChange={(e) => setEditName(e.target.value)}
+                                                    className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-base focus:border-neon-green outline-none w-full"
+                                                    placeholder="İsim Girin"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="text-white font-semibold text-lg truncate pr-2" title={session.user?.name || 'Kullanıcı'}>
+                                                {session.user?.name || 'Kullanıcı'}
+                                            </div>
+                                        )}
+                                        <div className="text-sm text-gray-400 truncate" title={session.user?.email || ''}>
+                                            {session.user?.email}
                                         </div>
-                                    ) : (
-                                        <div className="text-white font-semibold text-lg truncate pr-2" title={session.user?.name || 'Kullanıcı'}>
-                                            {session.user?.name || 'Kullanıcı'}
-                                        </div>
-                                    )}
-                                    <div className="text-sm text-gray-400 truncate" title={session.user?.email || ''}>
-                                        {session.user?.email}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
-                                    disabled={isSaving}
-                                    className={`absolute top-0 right-0 lg:static flex-shrink-0 text-xs px-3 py-1 rounded border transition-colors whitespace-nowrap ${isEditing
-                                            ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
-                                            : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
-                                        }`}
-                                >
-                                    {isSaving ? '...' : isEditing ? 'Kaydet' : 'Düzenle'}
-                                </button>
-                                {isEditing && (
+
+                                <div className="flex items-center gap-2 self-end sm:self-center ml-auto">
+                                    {isEditing && (
+                                        <button
+                                            onClick={() => {
+                                                setIsEditing(false)
+                                                setEditName(session.user?.name || '')
+                                            }}
+                                            className="text-xs px-4 py-2 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
+                                        >
+                                            İptal
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={() => {
-                                            setIsEditing(false)
-                                            setEditName(session.user?.name || '')
-                                        }}
-                                        className="absolute right-16 top-0 lg:static text-xs px-3 py-1 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10"
+                                        onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
+                                        disabled={isSaving}
+                                        className={`text-xs px-4 py-2 rounded border transition-colors whitespace-nowrap font-semibold ${isEditing
+                                                ? 'bg-neon-green text-black border-neon-green hover:bg-neon-green/80'
+                                                : 'border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
+                                            }`}
                                     >
-                                        İptal
+                                        {isSaving ? 'Kaydediliyor...' : isEditing ? 'Kaydet' : 'Düzenle'}
                                     </button>
-                                )}
+                                </div>
                             </div>
 
                             <div className="space-y-4 pt-4 border-t border-gray-700">
