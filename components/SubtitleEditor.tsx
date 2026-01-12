@@ -62,6 +62,7 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
     const [segments, setSegments] = useState<SubtitleSegment[]>(initialSegments)
     const [isLoading, setIsLoading] = useState(false)
     const [loadingStatus, setLoadingStatus] = useState<string>('')
+    const [secondsRemaining, setSecondsRemaining] = useState<number>(0)
     const [currentStep, setCurrentStep] = useState<'transcribe' | 'edit'>('transcribe')
     const [videoTime, setVideoTime] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -196,9 +197,20 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
         }
     }
 
+
+
+    // ... existing code ...
+
     // Transcribe
     const handleTranscribe = async () => {
         setIsLoading(true)
+        // Estimate time: Video duration * 1.2 (safety margin for CPU)
+        if (videoRef.current?.duration) {
+            setSecondsRemaining(Math.ceil(videoRef.current.duration * 1.2))
+        } else {
+            setSecondsRemaining(60) // Default fallback
+        }
+
         try {
             const res = await fetch('/api/transcribe', {
                 method: 'POST',
@@ -218,6 +230,9 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                 return new Promise((resolve, reject) => {
                     const interval = setInterval(async () => {
                         try {
+                            // Decrement timer
+                            setSecondsRemaining(prev => Math.max(0, prev - 1))
+
                             const statusRes = await fetch(`/api/status?id=${jobId}`)
                             if (!statusRes.ok) return
 
@@ -228,7 +243,7 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                 setLoadingStatus(job.message)
                             }
                             if (job.queuePosition !== undefined) {
-                                setLoadingStatus(`In Queue: Position ${job.queuePosition}`)
+                                setLoadingStatus(`Sırada: ${job.queuePosition}. Kişi`)
                             }
 
                             if (job.status === 'completed' && job.result?.segments) {
@@ -246,7 +261,7 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                     setTimeout(() => {
                         clearInterval(interval)
                         reject(new Error('Transcription timed out'))
-                    }, 5 * 60 * 1000)
+                    }, 10 * 60 * 1000) // 10 min timeout
                 })
             }
 
@@ -259,6 +274,7 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
             alert('Transkripsiyon hatası: ' + error)
         } finally {
             setIsLoading(false)
+            setSecondsRemaining(0)
         }
     }
 
@@ -608,10 +624,10 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                             <div className="flex flex-col items-center">
                                                 <div className="flex items-center gap-2">
                                                     <span className="animate-spin text-xl">⏳</span>
-                                                    <span>PROCESSING</span>
+                                                    <span>{secondsRemaining > 0 ? `${secondsRemaining}s` : 'PROCESSING'}</span>
                                                 </div>
                                                 <span className="text-[10px] font-mono text-neon-black/80 mt-1 animate-pulse">
-                                                    {loadingStatus || 'Initializing...'}
+                                                    {loadingStatus || 'Başlatılıyor...'}
                                                 </span>
                                             </div>
                                         ) : (
