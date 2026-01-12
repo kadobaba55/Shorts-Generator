@@ -38,16 +38,34 @@ function parseDuration(timeStr: string): number {
 export async function POST(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions)
-        if (!session?.user?.email) {
-            return NextResponse.json({ error: "Giriş yapmanız gerekiyor" }, { status: 401 })
-        }
+        const ip = request.headers.get('x-forwarded-for') || 'anonymous'
 
-        const user = await prisma.user.findUnique({
-            where: { email: session.user.email }
-        })
+        let user = null
+        let isGuest = false
 
-        if (!user || user.tokens < 1) {
-            return NextResponse.json({ error: "Yetersiz token! Lütfen token yükleyin." }, { status: 403 })
+        if (session?.user?.email) {
+            // Giriş yapmış kullanıcı
+            user = await prisma.user.findUnique({
+                where: { email: session.user.email }
+            })
+
+            if (!user || user.tokens < 1) {
+                return NextResponse.json({ error: "Yetersiz token! Lütfen token yükleyin." }, { status: 403 })
+            }
+        } else {
+            // Guest kullanıcı - IP bazlı limit kontrolü
+            isGuest = true
+            const { checkGuestLimit, incrementGuestUsage } = require('@/lib/guestLimit')
+            const guestCheck = checkGuestLimit(ip)
+
+            if (!guestCheck.allowed) {
+                const hoursRemaining = Math.ceil(guestCheck.resetIn / (1000 * 60 * 60))
+                return NextResponse.json({
+                    error: `Ücretsiz günlük limitiniz doldu! Giriş yapın veya ${hoursRemaining} saat bekleyin.`,
+                    isGuest: true,
+                    resetIn: guestCheck.resetIn
+                }, { status: 403 })
+            }
         }
 
         const { videoPath, clips, addSubtitles = true }: ProcessRequest = await request.json()
@@ -222,21 +240,27 @@ export async function POST(request: NextRequest) {
                     }
                 } // End loop
 
-                // Deduct token (database update)
-                // Note: Token is deducted AFTER success. Could also be before.
-                await prisma.$transaction([
-                    prisma.transaction.create({
-                        data: {
-                            userId: user.id,
-                            amount: -1,
-                            type: 'USAGE'
-                        }
-                    }),
-                    prisma.user.update({
-                        where: { id: user.id },
-                        data: { tokens: { decrement: 1 } }
-                    })
-                ])
+                // Deduct token (database update) - Only for logged-in users
+                // Guest users don't have tokens, they use IP-based daily limit
+                if (user && !isGuest) {
+                    await prisma.$transaction([
+                        prisma.transaction.create({
+                            data: {
+                                userId: user.id,
+                                amount: -1,
+                                type: 'USAGE'
+                            }
+                        }),
+                        prisma.user.update({
+                            where: { id: user.id },
+                            data: { tokens: { decrement: 1 } }
+                        })
+                    ])
+                } else if (isGuest) {
+                    // Increment guest usage
+                    const { incrementGuestUsage } = require('@/lib/guestLimit')
+                    incrementGuestUsage(ip)
+                }
 
                 completeJob(job.id, 'process')
 

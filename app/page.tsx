@@ -78,6 +78,51 @@ export default function Home() {
     const [analyzeTotalEstimate, setAnalyzeTotalEstimate] = useState<number>(0)
     const [analyzeETA, setAnalyzeETA] = useState<string>('')
 
+    // LocalStorage Key for Video State Persistence
+    const STORAGE_KEY = 'kadostudio_video_state'
+
+    // Load video state from localStorage on mount
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY)
+            if (saved) {
+                const state = JSON.parse(saved)
+                // Check if state is less than 2 hours old
+                if (Date.now() - state.timestamp < 2 * 60 * 60 * 1000) {
+                    if (state.videoSrc) setVideoSrc(state.videoSrc)
+                    if (state.videoInfo) setVideoInfo(state.videoInfo)
+                    if (state.step !== undefined) setStep(state.step)
+                    if (state.clips) setClips(state.clips)
+                    if (state.processedClips) setProcessedClips(state.processedClips)
+                    console.log('Video state restored from localStorage')
+                } else {
+                    localStorage.removeItem(STORAGE_KEY)
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load video state:', e)
+        }
+    }, [])
+
+    // Save video state to localStorage when it changes
+    useEffect(() => {
+        if (videoSrc || step > 0 || processedClips.length > 0) {
+            try {
+                const state = {
+                    videoSrc,
+                    videoInfo,
+                    step,
+                    clips,
+                    processedClips,
+                    timestamp: Date.now()
+                }
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+            } catch (e) {
+                console.error('Failed to save video state:', e)
+            }
+        }
+    }, [videoSrc, videoInfo, step, clips, processedClips])
+
     // Download Video
     const handleDownload = async (videoUrl: string) => {
         console.log('Starting download:', videoUrl)
@@ -518,6 +563,28 @@ export default function Home() {
                     </div>
                 </div>
             </header>
+
+            {/* Guest Mode Banner */}
+            {!session && step > 0 && (
+                <div className="bg-gradient-to-r from-neon-amber/20 to-neon-purple/20 border-b border-neon-amber/30">
+                    <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">🎬</span>
+                            <div className="font-mono text-xs">
+                                <span className="text-neon-amber">Misafir Modu</span>
+                                <span className="text-gray-400 ml-2">| Günde 1 ücretsiz video | </span>
+                                <span className="text-neon-red">İndirmelerde filigran</span>
+                            </div>
+                        </div>
+                        <Link
+                            href="/register"
+                            className="btn-primary text-xs px-4 py-1.5 animate-pulse"
+                        >
+                            Kayıt Ol - Filigransız İndir
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             {/* Content Area */}
             <div className="container mx-auto px-4 pb-12">
