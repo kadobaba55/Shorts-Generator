@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json()
-        const { videoPath, language = 'tr', model = 'tiny' } = body
+        const { videoPath, language = 'tr', model = 'large-v2' } = body
 
         if (!videoPath) {
             return NextResponse.json({ error: 'Video path required' }, { status: 400 })
