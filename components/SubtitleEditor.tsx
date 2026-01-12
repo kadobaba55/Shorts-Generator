@@ -61,6 +61,7 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
     // Core state
     const [segments, setSegments] = useState<SubtitleSegment[]>(initialSegments)
     const [isLoading, setIsLoading] = useState(false)
+    const [loadingStatus, setLoadingStatus] = useState<string>('')
     const [currentStep, setCurrentStep] = useState<'transcribe' | 'edit'>('transcribe')
     const [videoTime, setVideoTime] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -221,6 +222,14 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                             if (!statusRes.ok) return
 
                             const job = await statusRes.json()
+
+                            // Update status message
+                            if (job.message) {
+                                setLoadingStatus(job.message)
+                            }
+                            if (job.queuePosition !== undefined) {
+                                setLoadingStatus(`In Queue: Position ${job.queuePosition}`)
+                            }
 
                             if (job.status === 'completed' && job.result?.segments) {
                                 clearInterval(interval)
@@ -408,8 +417,8 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                 {activeSegment && currentStep === 'edit' && (
                                     <div
                                         className={`absolute left-0 right-0 px-4 text-center pointer-events-none ${position === 'bottom' ? 'bottom-8' :
-                                                position === 'middle' ? 'top-1/2 -translate-y-1/2' :
-                                                    'top-8'
+                                            position === 'middle' ? 'top-1/2 -translate-y-1/2' :
+                                                'top-8'
                                             }`}
                                     >
                                         <motion.span
@@ -493,8 +502,8 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                                     key={style.id}
                                                     onClick={() => applyStylePreset(style)}
                                                     className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${selectedStyle.id === style.id
-                                                            ? 'bg-neon-green text-black'
-                                                            : 'bg-gray-800 hover:bg-gray-700'
+                                                        ? 'bg-neon-green text-black'
+                                                        : 'bg-gray-800 hover:bg-gray-700'
                                                         }`}
                                                 >
                                                     {style.name}
@@ -548,8 +557,8 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                                     key={pos.id}
                                                     onClick={() => setPosition(pos.id)}
                                                     className={`flex-1 px-3 py-2 rounded text-xs font-mono transition-colors ${position === pos.id
-                                                            ? 'bg-neon-cyan text-black'
-                                                            : 'bg-gray-800 hover:bg-gray-700'
+                                                        ? 'bg-neon-cyan text-black'
+                                                        : 'bg-gray-800 hover:bg-gray-700'
                                                         }`}
                                                 >
                                                     {pos.name}
@@ -567,8 +576,8 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                                     key={anim.id}
                                                     onClick={() => setAnimation(anim.id)}
                                                     className={`flex-1 px-3 py-2 rounded text-xs font-mono transition-colors ${animation === anim.id
-                                                            ? 'bg-neon-amber text-black'
-                                                            : 'bg-gray-800 hover:bg-gray-700'
+                                                        ? 'bg-neon-amber text-black'
+                                                        : 'bg-gray-800 hover:bg-gray-700'
                                                         }`}
                                                 >
                                                     {anim.icon} {anim.name}
@@ -593,12 +602,18 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                     <button
                                         onClick={handleTranscribe}
                                         disabled={isLoading}
-                                        className="btn-primary px-8 py-4 w-full max-w-xs flex items-center justify-center gap-2 text-lg"
+                                        className="btn-primary px-8 py-4 w-full max-w-xs flex items-center justify-center gap-2 text-lg relative overflow-hidden group"
                                     >
                                         {isLoading ? (
-                                            <>
-                                                <span className="animate-spin">⏳</span> ANALYZING...
-                                            </>
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="animate-spin text-xl">⏳</span>
+                                                    <span>PROCESSING</span>
+                                                </div>
+                                                <span className="text-[10px] font-mono text-neon-black/80 mt-1 animate-pulse">
+                                                    {loadingStatus || 'Initializing...'}
+                                                </span>
+                                            </div>
                                         ) : (
                                             '🚀 START TRANSCRIPTION'
                                         )}
@@ -614,8 +629,8 @@ export default function SubtitleEditor({ isOpen, onClose, videoPath, initialSegm
                                                 <div
                                                     key={seg.id}
                                                     className={`p-3 rounded border transition-all cursor-move ${isActive
-                                                            ? 'bg-neon-green/10 border-neon-green shadow-lg shadow-neon-green/20'
-                                                            : 'bg-black border-gray-800 hover:border-gray-600'
+                                                        ? 'bg-neon-green/10 border-neon-green shadow-lg shadow-neon-green/20'
+                                                        : 'bg-black border-gray-800 hover:border-gray-600'
                                                         }`}
                                                     draggable
                                                     onDragStart={() => setDraggedIndex(idx)}
