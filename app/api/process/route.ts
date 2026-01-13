@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Giriş yapmış kullanıcı
-        user = await prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { email: session.user.email }
         })
 
@@ -225,54 +225,50 @@ export async function POST(request: NextRequest) {
                     }
                 } // End loop
 
-                // Deduct token (database update) - Only for logged-in users
-                // Guest users don't have tokens, they use IP-based daily limit
-                if (user && !isGuest) {
-                    if (user) {
-                        await Promise.all([
-                            prisma.user.update({
-                                where: { id: user.id },
-                                data: { tokens: { decrement: 1 } }
-                            })
-                        ])
-                    }
-
-                    completeJob(job.id, 'process')
-
-                    updateJob(job.id, {
-                        status: 'completed',
-                        progress: 100,
-                        result: {
-                            success: true,
-                            outputId,
-                            clips: processedClips,
-                            message: `${clips.length} klip başarıyla işlendi`
-                        }
+                // Deduct token (database update)
+                if (user) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { tokens: { decrement: 1 } }
                     })
-
-                } catch (error: any) {
-                    console.error('Processing job error:', error)
-                    completeJob(job.id, 'process')
-                    updateJob(job.id, { status: 'error', error: error.message || 'İşlem hatası' })
                 }
+
+                completeJob(job.id, 'process')
+
+                updateJob(job.id, {
+                    status: 'completed',
+                    progress: 100,
+                    result: {
+                        success: true,
+                        outputId,
+                        clips: processedClips,
+                        message: `${clips.length} klip başarıyla işlendi`
+                    }
+                })
+
+            } catch (error: any) {
+                console.error('Processing job error:', error)
+                completeJob(job.id, 'process')
+                updateJob(job.id, { status: 'error', error: error.message || 'İşlem hatası' })
             }
+        }
 
         // Fire and forget
         startProcessing()
 
-            return NextResponse.json({
-                success: true,
-                jobId: job.id,
-                message: canStart ? 'işlem başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
-                queued: !canStart,
-                queuePosition: position
-            })
+        return NextResponse.json({
+            success: true,
+            jobId: job.id,
+            message: canStart ? 'işlem başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+            queued: !canStart,
+            queuePosition: position
+        })
 
-        } catch (error: any) {
-            console.error('Process error:', error)
-            return NextResponse.json(
-                { error: error.message || 'Video işleme hatası' },
-                { status: 500 }
-            )
-        }
+    } catch (error: any) {
+        console.error('Process error:', error)
+        return NextResponse.json(
+            { error: error.message || 'Video işleme hatası' },
+            { status: 500 }
+        )
     }
+}
