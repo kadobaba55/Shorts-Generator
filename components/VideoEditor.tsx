@@ -73,27 +73,25 @@ export default function VideoEditor({
             const percentage = x / rect.width
             const time = percentage * (videoRef.current.duration || 1)
 
-            setProcessedClips((prev: ProcessedClip[]) => {
-                const newClips = [...prev]
-                const clip = newClips[selectedClipIndex]
-                const currentStart = clip.trimStart || 0
-                const currentEnd = clip.trimEnd || clip.duration
-                const minDuration = 1 // Minimum 1 second clip
+            const newClips = [...processedClips]
+            const clip = newClips[selectedClipIndex]
+            const currentStart = clip.trimStart || 0
+            const currentEnd = clip.trimEnd || clip.duration
+            const minDuration = 1 // Minimum 1 second clip
 
-                if (draggingHandle === 'start') {
-                    // Update Start: Ensure it doesn't cross End
-                    const newStart = Math.min(time, currentEnd - minDuration)
-                    clip.trimStart = Math.max(0, newStart)
-                    clip.duration = currentEnd - clip.trimStart // Update visual duration although actual clip length logic might vary
-                } else {
-                    // Update End: Ensure it doesn't cross Start
-                    const newEnd = Math.max(time, currentStart + minDuration)
-                    clip.trimEnd = Math.min(videoRef.current?.duration || clip.end, newEnd)
-                    clip.duration = clip.trimEnd - currentStart
-                }
+            if (draggingHandle === 'start') {
+                // Update Start: Ensure it doesn't cross End
+                const newStart = Math.min(time, currentEnd - minDuration)
+                clip.trimStart = Math.max(0, newStart)
+                clip.duration = currentEnd - clip.trimStart // Update visual duration although actual clip length logic might vary
+            } else {
+                // Update End: Ensure it doesn't cross Start
+                const newEnd = Math.max(time, currentStart + minDuration)
+                clip.trimEnd = Math.min(videoRef.current?.duration || clip.end, newEnd)
+                clip.duration = clip.trimEnd - currentStart
+            }
 
-                return newClips
-            })
+            setProcessedClips(newClips)
         }
 
         const handleMouseUp = () => {
