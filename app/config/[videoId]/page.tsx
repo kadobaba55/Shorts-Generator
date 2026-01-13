@@ -45,6 +45,7 @@ export default function ConfigPage() {
     const [mode, setMode] = useState<'auto' | 'manual'>('auto')
     const [clipCount, setClipCount] = useState(3)
     const [clipDuration, setClipDuration] = useState(30)
+    const [manualClips, setManualClips] = useState<{ start: number; end: number; id: string }[]>([])
 
     // Processing State
     const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -77,29 +78,41 @@ export default function ConfigPage() {
         const totalEstimate = estimateAnalyzeTime(videoData.duration) + estimateRenderTime(videoData.duration, clipCount)
 
         try {
-            // Step 1: Analyze video
-            toast.loading('Video analiz ediliyor...', { id: 'processing' })
+            let clips = []
 
-            const analyzeRes = await fetch('/api/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    videoPath: videoData.videoPath,
-                    clipCount,
-                    clipDuration,
-                    youtubeUrl: videoData.url
+            if (mode === 'auto') {
+                // Step 1: Analyze video (Only for AUTO mode)
+                toast.loading('Video analiz ediliyor...', { id: 'processing' })
+
+                const analyzeRes = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        videoPath: videoData.videoPath,
+                        clipCount,
+                        clipDuration,
+                        youtubeUrl: videoData.url
+                    })
                 })
-            })
 
-            if (!analyzeRes.ok) {
-                const err = await analyzeRes.json()
-                throw new Error(err.error || 'Analiz başlatılamadı')
+                if (!analyzeRes.ok) {
+                    const err = await analyzeRes.json()
+                    throw new Error(err.error || 'Analiz başlatılamadı')
+                }
+
+                const { jobId: analyzeJobId } = await analyzeRes.json()
+
+                // Poll for analysis completion
+                clips = await pollForCompletion(analyzeJobId, 'analysis')
+            } else {
+                // MANUAL MODE: Use user defined clips directly
+                if (manualClips.length === 0) {
+                    toast.error('Lütfen en az bir klip ekleyin')
+                    setIsAnalyzing(false)
+                    return
+                }
+                clips = manualClips
             }
-
-            const { jobId: analyzeJobId } = await analyzeRes.json()
-
-            // Poll for analysis completion
-            const clips = await pollForCompletion(analyzeJobId, 'analysis')
 
             toast.loading('Klipler oluşturuluyor...', { id: 'processing' })
 
@@ -250,6 +263,8 @@ export default function ConfigPage() {
                     setClipCount={setClipCount}
                     clipDuration={clipDuration}
                     setClipDuration={setClipDuration}
+                    manualClips={manualClips}
+                    setManualClips={setManualClips}
                     onSubmit={handleConfigSubmit}
                     onBack={handleBack}
                     isAnalyzing={isAnalyzing}
