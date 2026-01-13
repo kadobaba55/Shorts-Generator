@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import LanguageSwitcher from './LanguageSwitcher'
+import { useLanguage } from './LanguageProvider'
 
 interface HeroProps {
     onVideoSubmit: (url: string) => void
@@ -13,6 +15,7 @@ interface HeroProps {
 export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, estimatedTimeRemaining }: HeroProps) {
     const [url, setUrl] = useState('')
     const [isFocused, setIsFocused] = useState(false)
+    const { t } = useLanguage()
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -22,7 +25,12 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
     }
 
     return (
-        <div className="min-h-[calc(100vh-200px)] flex items-center justify-center px-4 py-12">
+        <div className="min-h-[calc(100vh-200px)] flex items-center justify-center px-4 py-12 relative">
+            {/* Language Switcher - Absolute Top Right */}
+            <div className="absolute top-4 right-4 z-50">
+                <LanguageSwitcher />
+            </div>
+
             <div className="max-w-3xl w-full space-y-10 text-center">
 
                 {/* Animated Badge */}
@@ -33,7 +41,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                 >
                     <span className="animate-pulse w-2 h-2 rounded-full bg-kado-success" />
                     <span className="text-sm text-kado-text-secondary font-body">
-                        AI destekli video düzenleme
+                        {t('home.badge')}
                     </span>
                 </motion.div>
 
@@ -45,14 +53,13 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     className="space-y-4"
                 >
                     <h1 className="font-heading text-4xl md:text-6xl font-bold leading-tight">
-                        <span className="text-kado-text">Uzun Videoları</span>
+                        <span className="text-kado-text">{t('home.hero.titlePrefix')}</span>
                         <br />
-                        <span className="text-gradient">Viral Klipler</span>
-                        <span className="text-kado-text">e Dönüştür</span>
+                        <span className="text-gradient">{t('home.hero.titleHighlight')}</span>
+                        <span className="text-kado-text">{t('home.hero.titleSuffix')}</span>
                     </h1>
                     <p className="text-lg text-kado-text-secondary max-w-xl mx-auto font-body">
-                        YouTube, podcast ve canlı yayınlarınızı AI ile analiz edin.
-                        TikTok, Reels ve Shorts için mükemmel klipler oluşturun.
+                        {t('home.hero.subtitle')}
                     </p>
                 </motion.div>
 
@@ -80,7 +87,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                         onChange={(e) => setUrl(e.target.value)}
                                         onFocus={() => setIsFocused(true)}
                                         onBlur={() => setIsFocused(false)}
-                                        placeholder="YouTube URL yapıştırın..."
+                                        placeholder={t('home.hero.inputPlaceholder')}
                                         disabled={isDownloading}
                                         className="w-full px-4 py-4 bg-transparent text-kado-text font-body text-base placeholder-kado-text-muted focus:outline-none disabled:opacity-50"
                                     />
@@ -93,10 +100,10 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                     {isDownloading ? (
                                         <span className="flex items-center gap-2">
                                             <span className="spinner w-5 h-5" />
-                                            İndiriliyor...
+                                            {t('home.hero.downloading')}
                                         </span>
                                     ) : (
-                                        'Başla'
+                                        t('home.hero.startButton')
                                     )}
                                 </button>
                             </div>

@@ -1,5 +1,7 @@
 'use client'
 
+import { useLanguage } from './LanguageProvider'
+
 interface ConfigStepProps {
     videoInfo: { title: string; duration: number } | null
     language: string
@@ -35,6 +37,8 @@ export default function ConfigStep({
     isAnalyzing,
     estimatedTimeRemaining
 }: ConfigStepProps) {
+    const { t } = useLanguage()
+
     return (
         <div className="max-w-2xl mx-auto py-4 md:py-8 px-2 md:px-4 animate-slide-up">
             {/* Terminal Window */}
@@ -51,7 +55,7 @@ export default function ConfigStep({
                         onClick={onBack}
                         className="ml-auto font-mono text-[10px] md:text-xs text-neon-amber hover:text-neon-green transition-colors"
                     >
-                        [← BACK]
+                        [← {t('editor.back')}]
                     </button>
                 </div>
 
@@ -60,12 +64,12 @@ export default function ConfigStep({
                     {/* Video Info */}
                     {videoInfo && (
                         <div className="border border-neon-green/30 p-3 md:p-4 bg-bg-card">
-                            <div className="font-mono text-xs text-neon-amber mb-1 md:mb-2">&gt; LOADED:</div>
+                            <div className="font-mono text-xs text-neon-amber mb-1 md:mb-2">&gt; {t('config.loaded')}:</div>
                             <div className="font-mono text-xs md:text-sm text-neon-green truncate">
                                 {videoInfo.title}
                             </div>
                             <div className="font-mono text-[10px] md:text-xs text-gray-500 mt-1">
-                                Duration: {Math.floor(videoInfo.duration / 60)}:{String(Math.floor(videoInfo.duration % 60)).padStart(2, '0')}
+                                {t('config.duration')}: {Math.floor(videoInfo.duration / 60)}:{String(Math.floor(videoInfo.duration % 60)).padStart(2, '0')}
                             </div>
                         </div>
                     )}
@@ -73,7 +77,7 @@ export default function ConfigStep({
                     {/* Language Selection */}
                     <div className="space-y-2">
                         <label className="font-mono text-xs md:text-sm text-neon-amber">
-                            &gt; LANGUAGE:
+                            &gt; {t('config.language')}:
                         </label>
                         <select
                             value={language}
@@ -85,14 +89,14 @@ export default function ConfigStep({
                             <option value="de">🇩🇪 GERMAN</option>
                             <option value="es">🇪🇸 SPANISH</option>
                             <option value="fr">🇫🇷 FRENCH</option>
-                            <option value="auto">🌐 AUTO</option>
+                            <option value="auto">🌐 {t('config.auto')}</option>
                         </select>
                     </div>
 
                     {/* Whisper Model Selection */}
                     <div className="space-y-2">
                         <label className="font-mono text-xs md:text-sm text-neon-amber">
-                            &gt; AI_MODEL:
+                            &gt; {t('config.model')}:
                         </label>
                         <select
                             value={whisperModel}
@@ -139,13 +143,13 @@ export default function ConfigStep({
                     {mode === 'auto' && (
                         <div className="border border-neon-magenta/30 p-3 md:p-4 bg-bg-card space-y-4 animate-fade-in">
                             <div className="font-mono text-xs text-neon-magenta mb-2">
-                                &gt; AUTO_CONFIG:
+                                &gt; {t('config.auto').toUpperCase()}:
                             </div>
 
                             {/* Clip Count */}
                             <div className="space-y-2">
                                 <div className="flex justify-between font-mono text-xs md:text-sm">
-                                    <span className="text-gray-400">CLIPS:</span>
+                                    <span className="text-gray-400">{t('config.clipCount')}:</span>
                                     <span className="text-neon-green">[{clipCount}]</span>
                                 </div>
                                 <input
@@ -165,7 +169,7 @@ export default function ConfigStep({
                             {/* Clip Duration */}
                             <div className="space-y-2">
                                 <div className="flex justify-between font-mono text-xs md:text-sm">
-                                    <span className="text-gray-400">DURATION:</span>
+                                    <span className="text-gray-400">{t('config.clipDuration')}:</span>
                                     <span className="text-neon-green">[{clipDuration}s]</span>
                                 </div>
                                 <input
@@ -189,22 +193,20 @@ export default function ConfigStep({
                     <button
                         onClick={onSubmit}
                         disabled={isAnalyzing}
-                        className="w-full btn-primary py-3 md:py-4 font-pixel text-xs md:text-sm disabled:opacity-50"
+                        className="w-full btn-primary py-3 md:py-4 flex items-center justify-center gap-2 group relative overflow-hidden"
                     >
                         {isAnalyzing ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="loading-ascii"></span>
-                                ANALYZING... {estimatedTimeRemaining && `(${estimatedTimeRemaining})`}
-                            </span>
+                            <>
+                                <span className="spinner w-4 h-4 md:w-5 md:h-5 border-2"></span>
+                                <span className="font-mono text-xs md:text-sm">{t('processing')} {estimatedTimeRemaining && `(${estimatedTimeRemaining})`}</span>
+                            </>
                         ) : (
-                            'EXECUTE >> PROCESS'
+                            <>
+                                <span className="font-mono text-xs md:text-sm font-bold relative z-10">&gt; {t('config.analyzeButton')}</span>
+                                <div className="absolute inset-0 bg-neon-green/20 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            </>
                         )}
                     </button>
-
-                    {/* Token Info */}
-                    <div className="text-center font-mono text-[10px] md:text-xs text-gray-600">
-                        // {mode === 'auto' ? `${clipCount} tokens` : 'Manual mode'}
-                    </div>
                 </div>
             </div>
         </div>

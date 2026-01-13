@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import AuthProvider from '@/components/AuthProvider'
+import { LanguageProvider } from '@/components/LanguageProvider'
 import { Toaster } from 'react-hot-toast'
 import packageJson from '../package.json'
 
@@ -73,10 +74,13 @@ export default function RootLayout({
             </head>
             <body className="font-mono antialiased">
                 <AuthProvider>
-                    {/* Main Content */}
-                    <div className="min-h-screen bg-bg-terminal relative">
-                        {children}
-                    </div>
+                    <LanguageProvider>
+                        {/* Main Content */}
+                        <div className="min-h-screen bg-bg-terminal relative">
+                            {children}
+                        </div>
+                    </LanguageProvider>
+
 
                     {/* Retro Toaster */}
                     <Toaster
@@ -123,6 +127,6 @@ export default function RootLayout({
                     v{appVersion}
                 </div>
             </body>
-        </html>
+        </html >
     )
 }

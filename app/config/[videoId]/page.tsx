@@ -12,6 +12,8 @@ import {
     estimateAnalyzeTime,
     estimateRenderTime
 } from '@/lib/estimateTime'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface VideoData {
     videoPath: string
@@ -31,6 +33,7 @@ export default function ConfigPage() {
     const params = useParams()
     const videoId = params.videoId as string
     const { data: session } = useSession()
+    const { t } = useLanguage()
 
     // Video Data (from localStorage)
     const [videoData, setVideoData] = useState<VideoData | null>(null)
@@ -216,15 +219,18 @@ export default function ConfigPage() {
                             />
                         </Link>
                         <div className="font-mono text-xs text-neon-amber">
-                            [ STEP 1/2 - CONFIG ]
+                            {t('config.title')}
                         </div>
                     </div>
 
-                    {session && (
-                        <div className="font-mono text-xs text-neon-green">
-                            {session.user?.tokens} CREDITS
-                        </div>
-                    )}
+                    <div className="flex items-center gap-4">
+                        {session && (
+                            <div className="font-mono text-xs text-neon-green hidden md:block">
+                                {session.user?.tokens} {t('nav.credits')}
+                            </div>
+                        )}
+                        <LanguageSwitcher />
+                    </div>
                 </div>
             </header>
 

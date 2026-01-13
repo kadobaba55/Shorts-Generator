@@ -7,6 +7,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import VideoEditor from '@/components/VideoEditor'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface ProcessedClip {
     id: string
@@ -31,7 +33,9 @@ export default function EditorPage() {
     const router = useRouter()
     const params = useParams()
     const videoId = params.videoId as string
+
     const { data: session } = useSession()
+    const { t } = useLanguage()
 
     const [processedClips, setProcessedClips] = useState<ProcessedClip[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -141,13 +145,11 @@ export default function EditorPage() {
 
                     <div className="flex items-center gap-4">
                         {session && (
-                            <div className="font-mono text-xs text-neon-green">
-                                {session.user?.tokens} CREDITS
+                            <div className="font-mono text-xs text-neon-green hidden md:block">
+                                {session.user?.tokens} {t('nav.credits')}
                             </div>
                         )}
-                        <Link href="/" className="font-mono text-xs text-neon-cyan hover:text-white">
-                            [+ NEW VIDEO]
-                        </Link>
+                        <LanguageSwitcher />
                     </div>
                 </div>
             </header>
