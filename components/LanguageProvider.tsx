@@ -43,9 +43,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Prevent hydration mismatch by waiting for mount
-    if (!isLoaded) {
-        return <>{children}</>
-    }
+    // REMOVED: This causes build error because children need context during PRERENDER
+    // if (!isLoaded) {
+    //    return <>{children}</>
+    // }
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>
