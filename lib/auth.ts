@@ -1,10 +1,17 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import GoogleProvider from "next-auth/providers/google"
+import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
+    adapter: PrismaAdapter(prisma),
     providers: [
+        GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID || "",
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+        }),
         CredentialsProvider({
             name: "credentials",
             credentials: {
@@ -68,13 +75,6 @@ export const authOptions: NextAuthOptions = {
                     session.user.subscriptionPlan = userData.subscriptionPlan
                     // @ts-ignore
                     session.user.subscriptionEnd = userData.subscriptionEnd
-                }
-
-                // Also try from token as fallback
-                // @ts-ignore
-                if (!session.user.role && token.role) {
-                    // @ts-ignore
-                    session.user.role = token.role
                 }
             }
             return session
