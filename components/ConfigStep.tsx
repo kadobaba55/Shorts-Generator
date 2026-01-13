@@ -133,7 +133,7 @@ export default function ConfigStep({
                         <select
                             value={language}
                             onChange={(e) => setLanguage(e.target.value)}
-                            className="w-full input-retro"
+                            className="w-full bg-gray-900 border border-gray-700 text-neon-green rounded px-3 py-2 font-mono text-xs md:text-sm focus:border-neon-green outline-none"
                         >
                             <option value="tr">🇹🇷 TURKISH</option>
                             <option value="en">🇺🇸 ENGLISH</option>
@@ -152,7 +152,7 @@ export default function ConfigStep({
                         <select
                             value={whisperModel}
                             onChange={(e) => setWhisperModel(e.target.value as any)}
-                            className="w-full input-retro"
+                            className="w-full bg-gray-900 border border-gray-700 text-neon-green rounded px-3 py-2 font-mono text-xs md:text-sm focus:border-neon-green outline-none"
                         >
                             <option value="tiny">⚡ TINY - Fast</option>
                             <option value="base">🚀 BASE - Balanced</option>
