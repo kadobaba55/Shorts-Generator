@@ -66,6 +66,7 @@ module.exports = {
                 'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
                 'bounce-in': 'bounceIn 0.5s ease-out forwards',
                 'slide-up': 'slideUp 0.5s ease-out forwards',
+                'fade-in': 'fadeIn 0.2s ease-out forwards',
                 'shimmer': 'shimmer 2s infinite',
                 'spin-slow': 'spin 3s linear infinite',
                 // Legacy
