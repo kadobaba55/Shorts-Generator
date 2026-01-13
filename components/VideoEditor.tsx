@@ -164,7 +164,7 @@ export default function VideoEditor({
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement) return
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
             switch (e.key) {
                 case ' ':
