@@ -242,6 +242,38 @@ export default function VideoEditor({
         })
     }
 
+    // Unified Render & Export Handler
+    const handleRenderAndExport = async () => {
+        if (!selectedClip) return
+        toast.loading('Rendering clip...', { id: 'render' })
+        try {
+            const res = await fetch('/api/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    videoPath: selectedClip.videoPath,
+                    trimStart: selectedClip.trimStart || 0,
+                    trimEnd: selectedClip.trimEnd || selectedClip.duration,
+                    aspectRatio,
+                    transform
+                })
+            })
+
+            if (!res.ok) throw new Error('Render failed')
+            const data = await res.json()
+
+            // Download
+            const link = document.createElement('a')
+            link.href = data.url
+            link.download = `rendered_clip_${selectedClipIndex + 1}.mp4`
+            link.click()
+            toast.success('Render complete!', { id: 'render' })
+        } catch (e) {
+            console.error(e)
+            toast.error('Render failed', { id: 'render' })
+        }
+    }
+
     return (
         <div className="py-4 md:py-8 animate-slide-up">
             {/* Editor Terminal Window */}
@@ -262,36 +294,8 @@ export default function VideoEditor({
                             [← BACK]
                         </button>
                         <button
-                            onClick={async () => {
-                                if (!selectedClip) return
-                                toast.loading('Rendering clip...', { id: 'render' })
-                                try {
-                                    const res = await fetch('/api/export', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            videoPath: selectedClip.videoPath,
-                                            trimStart: selectedClip.trimStart || 0,
-                                            trimEnd: selectedClip.trimEnd || selectedClip.duration,
-                                            aspectRatio,
-                                            transform
-                                        })
-                                    })
 
-                                    if (!res.ok) throw new Error('Render failed')
-                                    const data = await res.json()
-
-                                    // Download
-                                    const link = document.createElement('a')
-                                    link.href = data.url
-                                    link.download = `rendered_clip_${selectedClipIndex + 1}.mp4`
-                                    link.click()
-                                    toast.success('Render complete!', { id: 'render' })
-                                } catch (e) {
-                                    console.error(e)
-                                    toast.error('Render failed', { id: 'render' })
-                                }
-                            }}
+                            onClick={handleRenderAndExport}
                             className="font-mono text-[10px] md:text-xs text-neon-cyan hover:text-neon-green transition-colors border border-neon-cyan px-3 py-1 rounded hover:bg-neon-cyan/10"
                         >
                             [RENDER & EXPORT]
@@ -604,10 +608,10 @@ export default function VideoEditor({
                                         </button>
                                     )}
                                     <button
-                                        onClick={() => selectedClip && downloadClip(selectedClip, selectedClipIndex)}
+                                        onClick={handleRenderAndExport}
                                         className="flex-1 btn-secondary py-2 text-xs"
                                     >
-                                        [DOWNLOAD]
+                                        [RENDER]
                                     </button>
                                 </div>
                             </div>
@@ -796,10 +800,10 @@ export default function VideoEditor({
                                     {/* Actions */}
                                     <div className="space-y-2 hidden lg:block">
                                         <button
-                                            onClick={() => downloadClip(selectedClip, selectedClipIndex)}
+                                            onClick={handleRenderAndExport}
                                             className="w-full btn-secondary py-2 text-xs"
                                         >
-                                            [DOWNLOAD]
+                                            [RENDER & DOWNLOAD]
                                         </button>
                                     </div>
                                 </>
