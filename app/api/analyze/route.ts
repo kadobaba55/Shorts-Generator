@@ -105,8 +105,17 @@ export async function POST(request: NextRequest) {
                             for (const point of sortedHeatmap) {
                                 if (selectedClips.length >= clipCount) break
 
-                                const startTime = point.start_time
+                                // Center the clip around the peak engagement point
+                                // point.start_time represents the start of the "highlighted" moment
+                                // We want this moment to be in the middle of our clip
+                                const halfDuration = clipDuration / 2
+                                let startTime = Math.max(0, point.start_time - halfDuration)
                                 const endTime = Math.min(startTime + clipDuration, totalDuration)
+
+                                // Adjust start time if end time was clamped
+                                if (endTime === totalDuration) {
+                                    startTime = Math.max(0, endTime - clipDuration)
+                                }
 
                                 // Check for overlap
                                 const overlaps = selectedClips.some(clip =>
@@ -191,10 +200,21 @@ export async function POST(request: NextRequest) {
                         )
 
                         if (!overlaps) {
-                            const clipEnd = Math.min(segment.time + clipDuration, totalDuration)
+                            // Center around the loud segment (segment.time is start of 5s chunk)
+                            // We want the middle of this 5s chunk to be the middle of our clip
+                            const segmentMiddle = segment.time + (intervalSeconds / 2)
+                            const halfDuration = clipDuration / 2
+
+                            let start = Math.max(0, segmentMiddle - halfDuration)
+                            let end = Math.min(start + clipDuration, totalDuration)
+
+                            // Adjust start if end was clamped
+                            if (end === totalDuration) {
+                                start = Math.max(0, end - clipDuration)
+                            }
                             selectedClips.push({
-                                start: segment.time,
-                                end: clipEnd,
+                                start: start,
+                                end: end,
                                 score: Math.round((segment.volume + 50) * 2),
                                 reason: segment.volume > meanVolume + 5 ? '🔊 Yüksek ses seviyesi' :
                                     segment.volume > meanVolume ? '🔉 Orta ses seviyesi' : '🔈 Normal ses'
