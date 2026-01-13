@@ -157,7 +157,7 @@ function LoginContent() {
 
             <div className="mt-8 text-center">
                 <p className="text-sm text-kado-text-secondary font-body">
-                    {t('auth.login.noAccount')}{' '}
+                    {t('auth.noAccount')}{' '}
                     <Link href="/register" className="text-kado-primary hover:text-kado-secondary font-bold transition-colors">
                         {t('auth.register.submit')}
                     </Link>
