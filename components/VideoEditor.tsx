@@ -21,7 +21,8 @@ interface ProcessedClip {
     speed?: number
 }
 
-import SubtitleEditor from './SubtitleEditor'
+// SubtitleEditor import removed
+import { useRouter, usePathname } from 'next/navigation'
 
 interface VideoEditorProps {
     processedClips: ProcessedClip[]
@@ -42,15 +43,16 @@ export default function VideoEditor({
     isAnalyzing = false,
     processProgress,
     onBack,
-    onAddSubtitles, // This prop will be used inside the custom handler now
     onAddSubtitlesToAll,
     estimatedTimeRemaining
 }: VideoEditorProps) {
+    const router = useRouter()
+    const pathname = usePathname()
     const [selectedClipIndex, setSelectedClipIndex] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
     // Subtitle Editor State
-    const [isSubtitleEditorOpen, setIsSubtitleEditorOpen] = useState(false)
+    // REMOVED: const [isSubtitleEditorOpen, setIsSubtitleEditorOpen] = useState(false)
     const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null)
     const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16')
     const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain')
@@ -63,55 +65,21 @@ export default function VideoEditor({
     const timelineRef = useRef<HTMLDivElement>(null)
 
     const handleOpenSubtitleEditor = (index: number) => {
-        setEditingClipIndex(index)
-        setIsSubtitleEditorOpen(true)
+        // Navigate to dedicated subtitle page
+        // pathname is like /editor/[videoId]
+        // we want /editor/[videoId]/subtitle/clip_[index+1]
+        const clipId = `clip_${index + 1}`
+        router.push(`${pathname}/subtitle/${clipId}`)
     }
 
-    const handleSaveSubtitles = async (segments: any[], style?: any) => {
-        if (editingClipIndex === null) return
+    // Removed handleSaveSubtitles as it's now handled in the dedicated page
+    // Refetch data on focus to update UI if coming back from subtitle editor
 
-        const clip = processedClips[editingClipIndex]
+    // We rely on parent calling setProcessedClips, but parent needs to re-read localStorage.
+    // VideoEditor doesn't read localStorage, the parent page does.
+    // We can trigger a reload via a callback or simpler: trigger a router refresh?
+    // Parent page should listen to focus/storage events.
 
-        // Optimistic update
-        const updatedClips = [...processedClips]
-        updatedClips[editingClipIndex].isProcessing = true
-        setProcessedClips(updatedClips)
-
-        try {
-            // Use new subtitle endpoint that burns segments with custom style
-            const res = await fetch('/api/subtitle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    highlightKeywords: true,
-                    // Pass current trim points to burn subtitles correctly
-                    trimStart: clip.trimStart || 0,
-                    trimEnd: clip.trimEnd || clip.duration // Fallback to full clip duration if no trim
-                })
-            })
-
-            if (!res.ok) throw new Error('Subtitle failed')
-
-            const data = await res.json()
-
-            const finalClips = [...processedClips]
-            finalClips[editingClipIndex] = {
-                ...finalClips[editingClipIndex],
-                videoPath: data.outputPath,
-                isProcessing: false,
-                hasSubtitles: true
-            }
-            setProcessedClips(finalClips)
-            setIsSubtitleEditorOpen(false)
-
-        } catch (error) {
-            console.error(error)
-            const revertedClips = [...processedClips]
-            revertedClips[editingClipIndex].isProcessing = false
-            setProcessedClips(revertedClips)
-            alert('Altyazı eklenirken hata oluştu')
-        }
-    }
 
     const selectedClip = processedClips[selectedClipIndex]
 
@@ -240,12 +208,39 @@ export default function VideoEditor({
                             [← BACK]
                         </button>
                         <button
-                            onClick={() => {
-                                processedClips.forEach((clip, i) => downloadClip(clip, i))
+                            onClick={async () => {
+                                if (!selectedClip) return
+                                toast.loading('Rendering clip...', { id: 'render' })
+                                try {
+                                    const res = await fetch('/api/export', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            videoPath: selectedClip.videoPath,
+                                            trimStart: selectedClip.trimStart || 0,
+                                            trimEnd: selectedClip.trimEnd || selectedClip.duration,
+                                            aspectRatio,
+                                            transform
+                                        })
+                                    })
+
+                                    if (!res.ok) throw new Error('Render failed')
+                                    const data = await res.json()
+
+                                    // Download
+                                    const link = document.createElement('a')
+                                    link.href = data.url
+                                    link.download = `rendered_clip_${selectedClipIndex + 1}.mp4`
+                                    link.click()
+                                    toast.success('Render complete!', { id: 'render' })
+                                } catch (e) {
+                                    console.error(e)
+                                    toast.error('Render failed', { id: 'render' })
+                                }
                             }}
-                            className="font-mono text-[10px] md:text-xs text-neon-cyan hover:text-neon-green transition-colors"
+                            className="font-mono text-[10px] md:text-xs text-neon-cyan hover:text-neon-green transition-colors border border-neon-cyan px-3 py-1 rounded hover:bg-neon-cyan/10"
                         >
-                            [EXPORT]
+                            [RENDER & EXPORT]
                         </button>
                     </div>
                 </div>
@@ -409,15 +404,31 @@ export default function VideoEditor({
                                     }}
                                 />
 
-                                {/* Fit/Fill Toggle */}
+                                {/* Fit/Fill Toggle - Now acts as Auto-Zoom */}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        setObjectFit(prev => prev === 'contain' ? 'cover' : 'contain')
+                                        // Auto-calculate zoom to fill height
+                                        // Assuming input is 9:16 (1080x1920) inside a frame
+                                        // If we want to fill 16:9 frame with 9:16 content:
+                                        // We need to match WIDTH. 
+                                        // 9:16 content width is small compared to 16:9 container.
+                                        // Scale = (16/9) / (9/16) = 3.16x !
+
+                                        if (transform.scale > 1.1) {
+                                            setTransform({ scale: 1, x: 0, y: 0 }) // Reset
+                                        } else {
+                                            // Smart Zoom based on Aspect Ratio
+                                            let newScale = 1.5
+                                            if (aspectRatio === '16:9') newScale = 3.16 // Massive zoom to cover
+                                            if (aspectRatio === '1:1') newScale = 1.77 // Zoom to cover square
+
+                                            setTransform({ scale: newScale, x: 0, y: 0 })
+                                        }
                                     }}
                                     className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-neon-cyan border border-neon-cyan/50 rounded px-2 py-1 text-[10px] font-mono backdrop-blur-sm z-10"
                                 >
-                                    [{objectFit === 'contain' ? 'FIT' : 'FILL'}]
+                                    [{transform.scale > 1.1 ? 'RESET' : 'AUTO-FILL'}]
                                 </button>
 
                                 {/* Play Button Overlay */}
@@ -742,15 +753,9 @@ export default function VideoEditor({
                     </div>
                 </div>
 
-                {/* Subtitle Editor Modal */}
-                {isSubtitleEditorOpen && editingClipIndex !== null && (
-                    <SubtitleEditor
-                        isOpen={isSubtitleEditorOpen}
-                        onClose={() => setIsSubtitleEditorOpen(false)}
-                        videoPath={processedClips[editingClipIndex].videoPath}
-                        onSave={handleSaveSubtitles}
-                    />
-                )}
+
+                {/* REMOVED: Subtitle Editor Modal */}
+
             </div>
         </div >
     )

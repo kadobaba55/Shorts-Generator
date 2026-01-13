@@ -1,0 +1,741 @@
+'use client'
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { formatTime } from '@/lib/estimateTime'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { toast } from 'react-hot-toast'
+
+export interface SubtitleSegment {
+    id: string
+    start: number
+    end: number
+    text: string
+}
+
+export interface SubtitleStyle {
+    id: string
+    name: string
+    font: string
+    primaryColor: string
+    outlineColor: string
+    fontSize: number
+}
+
+interface SubtitlePageProps {
+    videoPath: string
+    initialSegments?: SubtitleSegment[]
+    onSave: (segments: SubtitleSegment[], style: SubtitleStyle) => Promise<void>
+    onBack: () => void
+    isLoading?: boolean
+}
+
+// Predefined styles
+const STYLES: SubtitleStyle[] = [
+    { id: 'viral', name: '🔥 Viral', font: 'Impact', primaryColor: '#00FFFF', outlineColor: '#000000', fontSize: 32 },
+    { id: 'neon', name: '✨ Neon', font: 'Arial Black', primaryColor: '#FF00FF', outlineColor: '#000000', fontSize: 30 },
+    { id: 'minimal', name: '🎯 Minimal', font: 'Roboto', primaryColor: '#FFFFFF', outlineColor: '#404040', fontSize: 24 },
+    { id: 'karaoke', name: '🎤 Karaoke', font: 'Comic Sans MS', primaryColor: '#FFD700', outlineColor: '#000000', fontSize: 28 },
+]
+
+// Available fonts
+const FONTS = ['Impact', 'Arial Black', 'Roboto', 'Comic Sans MS', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana']
+
+// Color presets
+const COLOR_PRESETS = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FF0000', '#FFFFFF', '#FFD700', '#FF6B6B']
+
+// Position options
+const POSITIONS = [
+    { id: 'bottom', name: 'Alt', marginV: 60 },
+    { id: 'middle', name: 'Orta', marginV: 200 },
+    { id: 'top', name: 'Üst', marginV: 400 },
+]
+
+// Animation options
+const ANIMATIONS = [
+    { id: 'none', name: 'Yok', icon: '—' },
+    { id: 'pop', name: 'Pop', icon: '💫' },
+    { id: 'fade', name: 'Fade', icon: '🌫️' },
+    { id: 'slide', name: 'Slide', icon: '➡️' },
+]
+
+export default function SubtitlePage({ videoPath, initialSegments = [], onSave, onBack }: SubtitlePageProps) {
+    // Core state
+    const [segments, setSegments] = useState<SubtitleSegment[]>(initialSegments)
+    const [isTranscribing, setIsTranscribing] = useState(false)
+    const [loadingStatus, setLoadingStatus] = useState<string>('')
+    const [secondsRemaining, setSecondsRemaining] = useState<number>(0)
+    const [currentStep, setCurrentStep] = useState<'transcribe' | 'edit'>('transcribe')
+    const [videoTime, setVideoTime] = useState(0)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const videoRef = useRef<HTMLVideoElement>(null)
+
+    // Styling state
+    const [selectedStyle, setSelectedStyle] = useState<SubtitleStyle>(STYLES[0])
+    const [customFont, setCustomFont] = useState('Impact')
+    const [customColor, setCustomColor] = useState('#00FFFF')
+    const [position, setPosition] = useState('bottom')
+    const [animation, setAnimation] = useState('none')
+    const [showStylePanel, setShowStylePanel] = useState(true) // Default open on separate page
+
+    // Undo/Redo state
+    const [history, setHistory] = useState<SubtitleSegment[][]>([])
+    const [historyIndex, setHistoryIndex] = useState(-1)
+
+    // Drag state
+    const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+
+    // Active segment for live preview
+    const activeSegment = segments.find(seg => videoTime >= seg.start && videoTime <= seg.end)
+
+    // Initialize with segments
+    useEffect(() => {
+        if (initialSegments.length > 0) {
+            setSegments(initialSegments)
+            setCurrentStep('edit')
+            pushToHistory(initialSegments)
+        }
+    }, [initialSegments])
+
+    // Push state to history for undo/redo
+    const pushToHistory = useCallback((newSegments: SubtitleSegment[]) => {
+        setHistory(prev => {
+            const newHistory = prev.slice(0, historyIndex + 1)
+            newHistory.push(JSON.parse(JSON.stringify(newSegments)))
+            return newHistory
+        })
+        setHistoryIndex(prev => prev + 1)
+    }, [historyIndex])
+
+    // Undo
+    const undo = useCallback(() => {
+        if (historyIndex > 0) {
+            setHistoryIndex(prev => prev - 1)
+            setSegments(JSON.parse(JSON.stringify(history[historyIndex - 1])))
+        }
+    }, [history, historyIndex])
+
+    // Redo
+    const redo = useCallback(() => {
+        if (historyIndex < history.length - 1) {
+            setHistoryIndex(prev => prev + 1)
+            setSegments(JSON.parse(JSON.stringify(history[historyIndex + 1])))
+        }
+    }, [history, historyIndex])
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Space to play/pause (prevent if typing in textarea)
+            if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+                e.preventDefault()
+                togglePlay()
+                return
+            }
+
+            // Ctrl/Cmd + S to save
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault()
+                if (currentStep === 'edit' && segments.length > 0) {
+                    handleSave()
+                }
+                return
+            }
+
+            // Ctrl/Cmd + Z to undo
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault()
+                undo()
+                return
+            }
+
+            // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y to redo
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                e.preventDefault()
+                redo()
+                return
+            }
+
+            // Arrow keys for seeking
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault()
+                seekRelative(-1)
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault()
+                seekRelative(1)
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [currentStep, segments, undo, redo])
+
+    // Toggle play/pause
+    const togglePlay = () => {
+        if (videoRef.current) {
+            if (videoRef.current.paused) {
+                videoRef.current.play()
+                setIsPlaying(true)
+            } else {
+                videoRef.current.pause()
+                setIsPlaying(false)
+            }
+        }
+    }
+
+    // Seek relative
+    const seekRelative = (seconds: number) => {
+        if (videoRef.current) {
+            videoRef.current.currentTime += seconds
+        }
+    }
+
+    // Transcribe
+    const handleTranscribe = async () => {
+        setIsTranscribing(true)
+        // Estimate time: Video duration * 1.2 (safety margin for CPU)
+        if (videoRef.current?.duration) {
+            setSecondsRemaining(Math.ceil(videoRef.current.duration * 1.2))
+        } else {
+            setSecondsRemaining(60) // Default fallback
+        }
+
+        try {
+            const res = await fetch('/api/transcribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoPath })
+            })
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error || 'Transcribe failed')
+            }
+
+            const { jobId } = await res.json()
+
+            // Poll for job completion
+            const pollForResult = async (): Promise<SubtitleSegment[]> => {
+                return new Promise((resolve, reject) => {
+                    const interval = setInterval(async () => {
+                        try {
+                            // Decrement timer
+                            setSecondsRemaining(prev => Math.max(0, prev - 1))
+
+                            const statusRes = await fetch(`/api/status?id=${jobId}`)
+                            if (!statusRes.ok) return
+
+                            const job = await statusRes.json()
+
+                            // Update status message
+                            if (job.message) {
+                                setLoadingStatus(job.message)
+                            }
+                            if (job.queuePosition !== undefined) {
+                                setLoadingStatus(`Sırada: ${job.queuePosition}. Kişi`)
+                            }
+
+                            if (job.status === 'completed' && job.result?.segments) {
+                                clearInterval(interval)
+                                resolve(job.result.segments)
+                            } else if (job.status === 'error') {
+                                clearInterval(interval)
+                                reject(new Error(job.error || 'Transcription failed'))
+                            }
+                        } catch (e) {
+                            console.error('Polling error:', e)
+                        }
+                    }, 1000)
+
+                    setTimeout(() => {
+                        clearInterval(interval)
+                        reject(new Error('Transcription timed out'))
+                    }, 10 * 60 * 1000) // 10 min timeout
+                })
+            }
+
+            const newSegments = await pollForResult()
+            setSegments(newSegments)
+            pushToHistory(newSegments)
+            setCurrentStep('edit')
+        } catch (error) {
+            console.error(error)
+            toast.error('Transkripsiyon hatası')
+        } finally {
+            setIsTranscribing(false)
+            setSecondsRemaining(0)
+        }
+    }
+
+    // Segment change with history
+    const handleSegmentChange = (index: number, field: keyof SubtitleSegment, value: any) => {
+        const newSegments = [...segments]
+        newSegments[index] = { ...newSegments[index], [field]: value }
+        setSegments(newSegments)
+    }
+
+    // Commit change to history on blur
+    const commitChange = () => {
+        pushToHistory(segments)
+    }
+
+    // Delete segment
+    const handleDeleteSegment = (index: number) => {
+        const newSegments = segments.filter((_, i) => i !== index)
+        setSegments(newSegments)
+        pushToHistory(newSegments)
+    }
+
+    // Add segment
+    const handleAddSegment = () => {
+        const lastSeg = segments[segments.length - 1]
+        const newStart = lastSeg ? lastSeg.end + 0.1 : 0
+        const newEnd = newStart + 2.0
+
+        const newSegments = [...segments, {
+            id: Date.now().toString(),
+            start: parseFloat(newStart.toFixed(2)),
+            end: parseFloat(newEnd.toFixed(2)),
+            text: 'Yeni altyazı'
+        }]
+        setSegments(newSegments)
+        pushToHistory(newSegments)
+    }
+
+    // Time update
+    const handleTimeUpdate = () => {
+        if (videoRef.current) {
+            setVideoTime(videoRef.current.currentTime)
+        }
+    }
+
+    // Seek to time
+    const seekTo = (time: number) => {
+        if (videoRef.current) {
+            videoRef.current.currentTime = time
+            videoRef.current.play()
+            setIsPlaying(true)
+        }
+    }
+
+    // Save with style
+    const handleSave = async () => {
+        setIsSaving(true)
+        try {
+            const styleToSave: SubtitleStyle = {
+                ...selectedStyle,
+                font: customFont,
+                primaryColor: customColor,
+            }
+            await onSave(segments, styleToSave)
+        } catch (error) {
+            console.error(error)
+            toast.error('Kaydetme hatası')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    // Apply style preset
+    const applyStylePreset = (style: SubtitleStyle) => {
+        setSelectedStyle(style)
+        setCustomFont(style.font)
+        setCustomColor(style.primaryColor)
+    }
+
+    // Highlight word (wrap in special markers)
+    const highlightWord = (segmentIndex: number) => {
+        const seg = segments[segmentIndex]
+        if (!seg) return
+
+        const selection = window.getSelection()
+        if (!selection || selection.toString().length === 0) return
+
+        const selectedText = selection.toString()
+        const newText = seg.text.replace(selectedText, `**${selectedText}**`)
+
+        handleSegmentChange(segmentIndex, 'text', newText)
+        commitChange()
+    }
+
+    return (
+        <main className="min-h-screen bg-bg-terminal text-white flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-bg-card">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={onBack}
+                        className="font-mono text-xs text-neon-amber hover:text-neon-green transition-colors"
+                    >
+                        [&larr; BACK TO EDITOR]
+                    </button>
+                    <div className="h-4 w-px bg-gray-700"></div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-neon-green font-pixel">SUBTITLE_STUDIO</span>
+                        <span className="text-xs text-gray-500 font-mono hidden sm:inline">PRO</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {currentStep === 'edit' && (
+                        <>
+                            <div className="hidden md:flex items-center gap-2 text-xs text-gray-500 font-mono mr-4">
+                                <span className="px-2 py-0.5 bg-gray-800 rounded">SPACE: Play/Pause</span>
+                                <span className="px-2 py-0.5 bg-gray-800 rounded">Ctrl+S: Save</span>
+                            </div>
+
+                            {historyIndex > 0 && (
+                                <button onClick={undo} className="text-gray-400 hover:text-white text-sm font-mono px-2" title="Undo">
+                                    ↩️
+                                </button>
+                            )}
+                            {historyIndex < history.length - 1 && (
+                                <button onClick={redo} className="text-gray-400 hover:text-white text-sm font-mono px-2" title="Redo">
+                                    ↪️
+                                </button>
+                            )}
+
+                            <button
+                                onClick={handleSave}
+                                disabled={isSaving}
+                                className="btn-primary px-6 py-2 text-sm ml-2 flex items-center gap-2"
+                            >
+                                {isSaving ? 'SAVING...' : '💾 SAVE & APPLY'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 flex overflow-hidden">
+
+                {/* Left: Video Preview with Live Subtitles */}
+                <div className="w-1/2 p-6 flex flex-col border-r border-gray-800 bg-black/20">
+                    <div className="relative aspect-[9/16] max-h-[70vh] mx-auto bg-black rounded border border-gray-800 overflow-hidden mb-6 shadow-2xl shadow-neon-green/5">
+                        <video
+                            ref={videoRef}
+                            src={videoPath}
+                            className="w-full h-full object-contain"
+                            onTimeUpdate={handleTimeUpdate}
+                            onPlay={() => setIsPlaying(true)}
+                            onPause={() => setIsPlaying(false)}
+                            playsInline
+                        />
+
+                        {/* Live Subtitle Preview Overlay */}
+                        {activeSegment && currentStep === 'edit' && (
+                            <div
+                                className={`absolute left-0 right-0 px-4 text-center pointer-events-none ${position === 'bottom' ? 'bottom-16' :
+                                    position === 'middle' ? 'top-1/2 -translate-y-1/2' :
+                                        'top-16'
+                                    }`}
+                            >
+                                <motion.span
+                                    key={activeSegment.id}
+                                    initial={
+                                        animation === 'pop' ? { scale: 0.5, opacity: 0 } :
+                                            animation === 'fade' ? { opacity: 0 } :
+                                                animation === 'slide' ? { x: -50, opacity: 0 } :
+                                                    {}
+                                    }
+                                    animate={
+                                        animation === 'pop' ? { scale: 1, opacity: 1 } :
+                                            animation === 'fade' ? { opacity: 1 } :
+                                                animation === 'slide' ? { x: 0, opacity: 1 } :
+                                                    {}
+                                    }
+                                    className="inline-block px-3 py-1 rounded leading-normal"
+                                    style={{
+                                        fontFamily: customFont,
+                                        fontSize: `${selectedStyle.fontSize}px`,
+                                        color: customColor,
+                                        textShadow: `2px 2px 4px ${selectedStyle.outlineColor}, -2px -2px 4px ${selectedStyle.outlineColor}`,
+                                        fontWeight: 'bold',
+                                    }}
+                                >
+                                    {activeSegment.text.replace(/\*\*/g, '')}
+                                </motion.span>
+                            </div>
+                        )}
+
+                        {/* Play/Pause Overlay Button */}
+                        <button
+                            onClick={togglePlay}
+                            className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity"
+                        >
+                            <span className="text-6xl filter drop-shadow-lg">{isPlaying ? '⏸️' : '▶️'}</span>
+                        </button>
+                    </div>
+
+                    {/* Video Controls */}
+                    <div className="max-w-md mx-auto w-full">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="font-mono text-sm text-neon-green">
+                                {formatTime(videoTime)}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => seekRelative(-5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
+                                    -5s
+                                </button>
+                                <button onClick={togglePlay} className="px-6 py-1.5 bg-neon-green/10 border border-neon-green rounded text-xs text-neon-green hover:bg-neon-green/20 font-mono w-24">
+                                    {isPlaying ? 'PAUSE' : 'PLAY'}
+                                </button>
+                                <button onClick={() => seekRelative(5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
+                                    +5s
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right: Editor Panels */}
+                <div className="w-1/2 flex flex-col bg-[#0f0f0f]">
+                    {currentStep === 'transcribe' ? (
+                        <div className="flex-1 flex flex-col items-center justify-center space-y-8 p-10">
+                            <div className="w-24 h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
+                                <span className="text-4xl">🎙️</span>
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-3xl font-bold text-white mb-2">AI Transkripsiyon</h3>
+                                <p className="text-gray-400 text-sm max-w-sm mx-auto">
+                                    Videodaki konuşmaları yapay zeka ile otomatik olarak metne dönüştür ve zamanla.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleTranscribe}
+                                disabled={isTranscribing}
+                                className="btn-primary px-12 py-5 text-xl flex items-center gap-3 shadow-[0_0_30px_rgba(74,222,128,0.3)] hover:shadow-[0_0_50px_rgba(74,222,128,0.5)] transition-all"
+                            >
+                                {isTranscribing ? (
+                                    <div className="flex flex-col items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span className="animate-spin text-2xl">⏳</span>
+                                            <span>{secondsRemaining > 0 ? `${secondsRemaining}s` : 'PROCESSING'}</span>
+                                        </div>
+                                        <span className="text-xs font-mono text-neon-black/80 mt-1 animate-pulse">
+                                            {loadingStatus || 'Başlatılıyor...'}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span>🚀</span>
+                                        <span>START MAGIC</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col h-full">
+                            {/* Editor Tabs/Header */}
+                            <div className="flex border-b border-gray-800">
+                                <button
+                                    onClick={() => setShowStylePanel(false)}
+                                    className={`flex-1 py-3 text-sm font-mono transition-colors ${!showStylePanel ? 'text-neon-cyan border-b-2 border-neon-cyan bg-neon-cyan/5' : 'text-gray-500 hover:text-gray-300'}`}
+                                >
+                                    TIMELINE & TEXT
+                                </button>
+                                <button
+                                    onClick={() => setShowStylePanel(true)}
+                                    className={`flex-1 py-3 text-sm font-mono transition-colors ${showStylePanel ? 'text-neon-purple border-b-2 border-neon-purple bg-neon-purple/5' : 'text-gray-500 hover:text-gray-300'}`}
+                                >
+                                    STYLE & ANIMATION
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-hidden relative">
+                                {/* Text Editor */}
+                                <div className={`absolute inset-0 overflow-y-auto p-4 space-y-3 custom-scrollbar transition-opacity duration-300 ${!showStylePanel ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+                                    {segments.map((seg, idx) => {
+                                        const isActive = videoTime >= seg.start && videoTime <= seg.end
+                                        return (
+                                            <div
+                                                key={seg.id}
+                                                className={`p-3 rounded border transition-all ${isActive
+                                                    ? 'bg-neon-green/5 border-neon-green/50 shadow-lg shadow-neon-green/10'
+                                                    : 'bg-black/40 border-gray-800 hover:border-gray-700'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div
+                                                        className="flex items-center gap-2 font-mono text-xs text-neon-cyan cursor-pointer hover:underline bg-gray-900 px-2 py-1 rounded"
+                                                        onClick={() => seekTo(seg.start)}
+                                                    >
+                                                        <span>⏱️</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            value={seg.start}
+                                                            onChange={(e) => handleSegmentChange(idx, 'start', parseFloat(e.target.value))}
+                                                            onBlur={commitChange}
+                                                            className="bg-transparent w-12 text-center border-b border-gray-700 focus:border-neon-cyan outline-none"
+                                                        />
+                                                        <span className="text-gray-600">→</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            value={seg.end}
+                                                            onChange={(e) => handleSegmentChange(idx, 'end', parseFloat(e.target.value))}
+                                                            onBlur={commitChange}
+                                                            className="bg-transparent w-12 text-center border-b border-gray-700 focus:border-neon-cyan outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1" />
+                                                    <button
+                                                        onClick={() => highlightWord(idx)}
+                                                        className="text-neon-amber hover:text-neon-amber/80 text-xs px-2 py-1 hover:bg-gray-800 rounded"
+                                                        title="Highlight Selected Word"
+                                                    >
+                                                        ✨ Highlight
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteSegment(idx)}
+                                                        className="text-red-500 hover:text-red-400 text-xs px-2 py-1 hover:bg-gray-800 rounded"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+
+                                                <textarea
+                                                    value={seg.text}
+                                                    onChange={(e) => handleSegmentChange(idx, 'text', e.target.value)}
+                                                    onBlur={commitChange}
+                                                    className="w-full bg-transparent text-sm text-gray-200 focus:text-white outline-none resize-none font-sans leading-relaxed"
+                                                    rows={2}
+                                                />
+                                            </div>
+                                        )
+                                    })}
+
+                                    <button
+                                        onClick={handleAddSegment}
+                                        className="w-full py-4 border border-dashed border-gray-700 text-gray-500 hover:border-neon-green hover:text-neon-green font-mono text-sm rounded transition-colors"
+                                    >
+                                        + ADD NEW SEGMENT
+                                    </button>
+                                </div>
+
+                                {/* Style Editor */}
+                                <div className={`absolute inset-0 overflow-y-auto p-6 space-y-8 custom-scrollbar transition-opacity duration-300 ${showStylePanel ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+
+                                    {/* PRESETS */}
+                                    <div className="space-y-3">
+                                        <div className="text-xs font-mono text-gray-500 tracking-widest">QUICK PRESETS</div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {STYLES.map(style => (
+                                                <button
+                                                    key={style.id}
+                                                    onClick={() => applyStylePreset(style)}
+                                                    className={`p-3 rounded text-left transition-all border ${selectedStyle.id === style.id
+                                                        ? 'bg-neon-green/10 border-neon-green text-neon-green'
+                                                        : 'bg-gray-900 border-gray-800 hover:border-gray-600 text-gray-300'
+                                                        }`}
+                                                >
+                                                    <div className="font-bold text-sm mb-1">{style.name}</div>
+                                                    <div className="text-[10px] opacity-60 font-mono">{style.font}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* FONT & COLOR */}
+                                    <div className="space-y-4">
+                                        <div className="text-xs font-mono text-gray-500 tracking-widest">TYPOGRAPHY</div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs text-gray-400">Font Family</label>
+                                            <select
+                                                value={customFont}
+                                                onChange={(e) => setCustomFont(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-neon-purple outline-none"
+                                            >
+                                                {FONTS.map(font => (
+                                                    <option key={font} value={font}>{font}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs text-gray-400">Primary Color</label>
+                                            <div className="flex gap-2 flex-wrap">
+                                                {COLOR_PRESETS.map(color => (
+                                                    <button
+                                                        key={color}
+                                                        onClick={() => setCustomColor(color)}
+                                                        className={`w-8 h-8 rounded-full border-2 transition-transform ${customColor === color ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-gray-700'
+                                                            }`}
+                                                        style={{ backgroundColor: color }}
+                                                    />
+                                                ))}
+                                                <input
+                                                    type="color"
+                                                    value={customColor}
+                                                    onChange={(e) => setCustomColor(e.target.value)}
+                                                    className="w-8 h-8 rounded-full cursor-pointer overflow-hidden border-none p-0"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-px bg-gray-800 my-4"></div>
+
+                                    {/* POSITION & ANIMATION */}
+                                    <div className="space-y-4">
+                                        <div className="text-xs font-mono text-gray-500 tracking-widest">LAYOUT & EFFECTS</div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs text-gray-400">Position</label>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {POSITIONS.map(pos => (
+                                                    <button
+                                                        key={pos.id}
+                                                        onClick={() => setPosition(pos.id)}
+                                                        className={`py-2 rounded text-xs font-mono transition-colors border ${position === pos.id
+                                                            ? 'bg-neon-cyan/20 border-neon-cyan text-neon-cyan'
+                                                            : 'bg-gray-900 border-gray-800 hover:border-gray-600'
+                                                            }`}
+                                                    >
+                                                        {pos.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs text-gray-400">Entrance Animation</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {ANIMATIONS.map(anim => (
+                                                    <button
+                                                        key={anim.id}
+                                                        onClick={() => setAnimation(anim.id)}
+                                                        className={`py-2 px-3 rounded text-xs font-mono transition-colors text-left border ${animation === anim.id
+                                                            ? 'bg-neon-amber/20 border-neon-amber text-neon-amber'
+                                                            : 'bg-gray-900 border-gray-800 hover:border-gray-600'
+                                                            }`}
+                                                    >
+                                                        <span className="mr-2">{anim.icon}</span>
+                                                        {anim.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Bottom Status */}
+                            <div className="p-3 bg-black border-t border-gray-800 flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                                <div>{segments.length} altyazı segmenti</div>
+                                <div>Otomatik kayıt aktif</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </main>
+    )
+}

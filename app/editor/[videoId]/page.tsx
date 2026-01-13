@@ -19,10 +19,10 @@ interface ProcessedClip {
     duration: number
     hasSubtitles: boolean
     isProcessing: boolean
-    // Padding info for manual timing
     paddingStart?: number
     trimStart?: number
     trimEnd?: number
+    subtitleSegments?: any[]
     // New editable properties
     fadeIn?: number
     fadeOut?: number
