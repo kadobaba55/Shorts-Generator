@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { toast } from 'react-hot-toast'
+import { useSession } from 'next-auth/react'
 
 interface ProcessedClip {
     id: string
@@ -48,6 +49,7 @@ export default function VideoEditor({
 }: VideoEditorProps) {
     const router = useRouter()
     const pathname = usePathname()
+    const { data: session, status } = useSession()
     const [selectedClipIndex, setSelectedClipIndex] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
@@ -244,6 +246,17 @@ export default function VideoEditor({
 
     // Unified Render & Export Handler
     const handleRenderAndExport = async () => {
+        // Guest Mode Check
+        // @ts-ignore
+        if (status === "unauthenticated" || !session?.user) {
+            toast.error("Video indirmek için giriş yapmalısınız!")
+            // Save current state if needed? For now just redirect.
+            // Ideally we save the project to localStorage so they can resume.
+            // But they are already working on local state.
+            router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname) + '&reason=guest_save')
+            return
+        }
+
         if (!selectedClip) return
         toast.loading('Rendering clip...', { id: 'render' })
         try {
