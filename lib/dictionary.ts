@@ -44,6 +44,10 @@ export const dictionary = {
         'auth.name': 'Ad Soyad',
         'auth.haveAccount': 'Hesabınız var mı?',
         'auth.noAccount': 'Hesabınız yok mu?',
+        'auth.remember': 'Beni Hatırla',
+        'auth.forgot': 'Şifremi Unuttum',
+        'auth.login.submit': 'Giriş Yap',
+        'auth.register.submit': 'Kayıt Ol',
 
         // Config
         'config.title': 'Video Ayarları',
@@ -119,6 +123,10 @@ export const dictionary = {
         'auth.name': 'Full Name',
         'auth.haveAccount': 'Already have an account?',
         'auth.noAccount': 'Don\'t have an account?',
+        'auth.remember': 'Remember me',
+        'auth.forgot': 'Forgot Password?',
+        'auth.login.submit': 'Login',
+        'auth.register.submit': 'Register',
 
         // Config
         'config.title': 'Video Configuration',
