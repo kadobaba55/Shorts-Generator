@@ -85,7 +85,9 @@ export async function POST(req: NextRequest) {
                 const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
 
                 // Use spawn to capture large JSON output safely
-                const pythonProcess = spawn('python', [
+                // Use venv python for faster-whisper
+                const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python')
+                const pythonProcess = spawn(pythonPath, [
                     scriptPath,
                     audioPath,
                     '--model', model,
