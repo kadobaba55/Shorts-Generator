@@ -50,6 +50,7 @@ export default function VideoEditor({
     const [isSubtitleEditorOpen, setIsSubtitleEditorOpen] = useState(false)
     const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null)
     const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16')
+    const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain')
 
     const [zoom, setZoom] = useState(1)
     const [showClipList, setShowClipList] = useState(false)
@@ -327,8 +328,8 @@ export default function VideoEditor({
                                             }`}
                                     >
                                         <div className="flex gap-3">
-                                            {/* Thumbnail Preview */}
-                                            <div className="relative w-16 h-24 bg-black border border-gray-800 shrink-0 overflow-hidden">
+                                            {/* Thumbnail Preview - 16:9 for landscape source */}
+                                            <div className="relative w-20 h-12 bg-black border border-gray-800 shrink-0 overflow-hidden">
                                                 <video
                                                     src={`${clip.videoPath}#t=1`}
                                                     className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
@@ -379,12 +380,23 @@ export default function VideoEditor({
                                     ref={videoRef}
                                     key={selectedClip?.subtitledPath || selectedClip?.videoPath}
                                     src={selectedClip?.subtitledPath || selectedClip?.videoPath}
-                                    className="w-full h-full object-contain"
+                                    className={`w-full h-full ${objectFit === 'contain' ? 'object-contain' : 'object-cover'}`}
                                     playsInline
                                     onPlay={() => setIsPlaying(true)}
                                     onPause={() => setIsPlaying(false)}
                                     onEnded={() => setIsPlaying(false)}
                                 />
+
+                                {/* Fit/Fill Toggle */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setObjectFit(prev => prev === 'contain' ? 'cover' : 'contain')
+                                    }}
+                                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-neon-cyan border border-neon-cyan/50 rounded px-2 py-1 text-[10px] font-mono backdrop-blur-sm z-10"
+                                >
+                                    [{objectFit === 'contain' ? 'FIT' : 'FILL'}]
+                                </button>
 
                                 {/* Play Button Overlay */}
                                 {!isPlaying && (
@@ -610,8 +622,8 @@ export default function VideoEditor({
                                                     key={ratio}
                                                     onClick={() => setAspectRatio(ratio as any)}
                                                     className={`px-2 py-1 text-xs font-mono border rounded transition-all ${aspectRatio === ratio
-                                                            ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10'
-                                                            : 'border-gray-700 text-gray-500 hover:border-gray-500'
+                                                        ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10'
+                                                        : 'border-gray-700 text-gray-500 hover:border-gray-500'
                                                         }`}
                                                 >
                                                     {ratio}
