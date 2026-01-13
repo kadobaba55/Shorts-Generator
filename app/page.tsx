@@ -8,10 +8,12 @@ import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import Hero from '@/components/Hero'
 import { formatTimeRemaining } from '@/lib/estimateTime'
+import { useLanguage } from '@/components/LanguageProvider'
 
 export default function Home() {
     const { data: session } = useSession()
     const router = useRouter()
+    const { t } = useLanguage()
 
     // Download State
     const [url, setUrl] = useState('')
@@ -144,12 +146,7 @@ export default function Home() {
 
                     {/* Navigation */}
                     <nav className="hidden md:flex items-center gap-6">
-                        <Link href="/" className="text-sm text-kado-text-secondary hover:text-kado-text transition-colors font-body">
-                            Özellikler
-                        </Link>
-                        <Link href="/pricing" className="text-sm text-kado-text-secondary hover:text-kado-text transition-colors font-body">
-                            Fiyatlar
-                        </Link>
+                        {/* Links removed per request */}
                     </nav>
 
                     {/* Auth Buttons */}
@@ -165,23 +162,23 @@ export default function Home() {
                                     </div>
                                     <div className="hidden sm:flex flex-col items-start">
                                         <span className="text-sm font-body text-kado-text">{session.user?.name}</span>
-                                        <span className="text-xs text-kado-accent font-semibold">{session.user?.tokens} Kredi</span>
+                                        <span className="text-xs text-kado-accent font-semibold">{session.user?.tokens} {t('nav.credits')}</span>
                                     </div>
                                 </Link>
                                 <button
                                     onClick={() => signOut()}
                                     className="btn-ghost text-sm px-3 py-2 rounded-lg"
                                 >
-                                    Çıkış
+                                    {t('nav.logout')}
                                 </button>
                             </div>
                         ) : (
                             <div className="flex items-center gap-3">
                                 <Link href="/login" className="btn-ghost text-sm px-4 py-2 rounded-lg">
-                                    Giriş
+                                    {t('nav.login')}
                                 </Link>
                                 <Link href="/register" className="btn-primary text-sm px-4 py-2 rounded-lg">
-                                    Kayıt Ol
+                                    {t('nav.register')}
                                 </Link>
                             </div>
                         )}
@@ -203,14 +200,11 @@ export default function Home() {
             <footer className="relative z-10 border-t border-kado-border/50 py-8 mt-auto">
                 <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-kado-text-muted font-body">
-                        © 2026 Kadostudio. AI destekli video düzenleme platformu.
+                        {t('footer.copyright')}
                     </p>
                     <div className="flex items-center gap-4">
-                        <Link href="/pricing" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
-                            Fiyatlar
-                        </Link>
                         <a href="mailto:destek@kadostudio.dev" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
-                            Destek
+                            {t('footer.support')}
                         </a>
                     </div>
                 </div>

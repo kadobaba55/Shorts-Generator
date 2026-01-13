@@ -146,12 +146,12 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     className="grid grid-cols-3 gap-4 pt-8"
                 >
                     {[
-                        { title: 'Akıllı Kesim', desc: 'AI ile en iyi anları bul' },
-                        { title: 'Otomatik Altyazı', desc: 'Viral stil yazı efektleri' },
-                        { title: 'Yüz Takibi', desc: 'Konuşmacıyı otomatik çerçevele' },
+                        { title: t('home.features.smartCut'), desc: t('home.features.smartCutDesc') },
+                        { title: t('home.features.autoSubtitle'), desc: t('home.features.autoSubtitleDesc') },
+                        { title: t('home.features.faceTracking'), desc: t('home.features.faceTrackingDesc') },
                     ].map((feature, i) => (
                         <motion.div
-                            key={feature.title}
+                            key={i}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 + i * 0.1 }}
@@ -175,13 +175,13 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     className="flex items-center justify-center gap-6 pt-4 text-kado-text-muted text-xs font-body"
                 >
                     <span className="flex items-center gap-1">
-                        <span className="text-kado-success">✓</span> Ücretsiz deneme
+                        <span className="text-kado-success">✓</span> {t('home.trust.free')}
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="text-kado-success">✓</span> Kredi kartı gerekmez
+                        <span className="text-kado-success">✓</span> {t('home.trust.noCard')}
                     </span>
                     <span className="flex items-center gap-1">
-                        <span className="text-kado-success">✓</span> Anında sonuç
+                        <span className="text-kado-success">✓</span> {t('home.trust.instant')}
                     </span>
                 </motion.div>
             </div>

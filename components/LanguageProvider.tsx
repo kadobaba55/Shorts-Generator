@@ -39,7 +39,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
 
     const t = (key: Key): string => {
-        return dictionary[language][key] || key
+        const value = dictionary[language][key]
+        return value !== undefined ? value : key
     }
 
     // Prevent hydration mismatch by waiting for mount
