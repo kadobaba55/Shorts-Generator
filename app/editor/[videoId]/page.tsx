@@ -19,6 +19,11 @@ interface ProcessedClip {
     duration: number
     hasSubtitles: boolean
     isProcessing: boolean
+    // New editable properties
+    fadeIn?: number
+    fadeOut?: number
+    volume?: number
+    speed?: number
 }
 
 interface EditorData {

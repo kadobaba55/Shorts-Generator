@@ -12,6 +12,10 @@ interface ProcessedClip {
     duration: number
     hasSubtitles: boolean
     isProcessing: boolean
+    fadeIn?: number
+    fadeOut?: number
+    volume?: number
+    speed?: number
 }
 
 import SubtitleEditor from './SubtitleEditor'
@@ -45,6 +49,7 @@ export default function VideoEditor({
     // Subtitle Editor State
     const [isSubtitleEditorOpen, setIsSubtitleEditorOpen] = useState(false)
     const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null)
+    const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16')
 
     const [zoom, setZoom] = useState(1)
     const [showClipList, setShowClipList] = useState(false)
@@ -315,20 +320,44 @@ export default function VideoEditor({
                                             setSelectedClipIndex(index)
                                             setShowClipList(false)
                                         }}
-                                        className={`p-2 md:p-3 text-left transition-all font-mono text-xs
+                                        className={`group relative p-2 md:p-3 text-left transition-all font-mono text-xs w-full overflow-hidden
                                             ${selectedClipIndex === index
-                                                ? 'border-2 border-neon-green bg-neon-green/10 text-neon-green'
-                                                : 'border border-gray-700 hover:border-neon-green/50 text-gray-400'
+                                                ? 'border-2 border-neon-green bg-neon-green/10 text-neon-green scale-[1.02] shadow-[0_0_15px_rgba(74,222,128,0.2)]'
+                                                : 'border border-gray-700 hover:border-neon-green/50 text-gray-400 hover:bg-gray-800'
                                             }`}
                                     >
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span>CLIP_{String(index + 1).padStart(2, '0')}</span>
-                                            {clip.hasSubtitles && (
-                                                <span className="text-neon-cyan text-[10px]">◉</span>
-                                            )}
-                                        </div>
-                                        <div className="text-gray-600 text-[10px]">
-                                            {formatTime(clip.start)} → {formatTime(clip.end)}
+                                        <div className="flex gap-3">
+                                            {/* Thumbnail Preview */}
+                                            <div className="relative w-16 h-24 bg-black border border-gray-800 shrink-0 overflow-hidden">
+                                                <video
+                                                    src={`${clip.videoPath}#t=1`}
+                                                    className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
+                                                    muted
+                                                    playsInline
+                                                />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                                            </div>
+
+                                            <div className="flex flex-col justify-between py-1 w-full">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-bold group-hover:text-neon-cyan transition-colors">CLIP_{String(index + 1).padStart(2, '0')}</span>
+                                                    {clip.hasSubtitles && (
+                                                        <span className="text-neon-cyan text-[10px] animate-pulse">◉ SUB</span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex gap-2">
+                                                    <div className="bg-gray-900/80 px-1.5 rounded text-[10px] text-gray-500 border border-gray-800">
+                                                        {formatTime(clip.duration)}
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-gray-600 text-[10px] flex items-center gap-1">
+                                                    <span>{formatTime(clip.start)}</span>
+                                                    <span className="text-gray-700">→</span>
+                                                    <span>{formatTime(clip.end)}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </button>
                                 ))}
@@ -340,7 +369,12 @@ export default function VideoEditor({
                         {/* Center: Video Preview */}
                         <div className="lg:col-span-2 p-3 md:p-4 space-y-3 md:space-y-4">
                             {/* Video Player */}
-                            <div className="border-2 border-neon-green bg-black aspect-[9/16] max-h-[50vh] md:max-h-[60vh] mx-auto relative overflow-hidden">
+                            <div className={`
+                                border-2 border-neon-green bg-black mx-auto relative overflow-hidden transition-all duration-300
+                                ${aspectRatio === '9:16' ? 'aspect-[9/16] max-h-[60vh]' : ''}
+                                ${aspectRatio === '16:9' ? 'aspect-[16/9] w-full' : ''}
+                                ${aspectRatio === '1:1' ? 'aspect-square max-h-[60vh]' : ''}
+                            `}>
                                 <video
                                     ref={videoRef}
                                     key={selectedClip?.subtitledPath || selectedClip?.videoPath}
@@ -500,19 +534,137 @@ export default function VideoEditor({
                                         )}
                                     </div>
 
-                                    {/* Effects */}
-                                    <div className="space-y-2 md:space-y-3 pb-3 md:pb-4 border-b border-gray-700">
+                                    {/* Duration & Range Controls */}
+                                    <div className="space-y-4 pb-4 border-b border-gray-700">
+                                        <div className="font-mono text-xs text-neon-amber">&gt; TIMING</div>
+
+                                        <div className="space-y-3">
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between text-[10px] text-gray-400">
+                                                    <span>START: {formatTime(selectedClip.start)}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            const newClips = [...processedClips]
+                                                            newClips[selectedClipIndex].start = Math.max(0, selectedClip.start - 0.5)
+                                                            newClips[selectedClipIndex].duration = newClips[selectedClipIndex].end - newClips[selectedClipIndex].start
+                                                            setProcessedClips(newClips)
+                                                        }}
+                                                        className="px-2 py-1 bg-gray-800 hover:bg-neon-green/20 rounded text-xs text-neon-green"
+                                                    >
+                                                        -0.5s
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const newClips = [...processedClips]
+                                                            newClips[selectedClipIndex].start = Math.min(selectedClip.end - 1, selectedClip.start + 0.5)
+                                                            newClips[selectedClipIndex].duration = newClips[selectedClipIndex].end - newClips[selectedClipIndex].start
+                                                            setProcessedClips(newClips)
+                                                        }}
+                                                        className="px-2 py-1 bg-gray-800 hover:bg-neon-green/20 rounded text-xs text-neon-green"
+                                                    >
+                                                        +0.5s
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between text-[10px] text-gray-400">
+                                                    <span>END: {formatTime(selectedClip.end)}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            const newClips = [...processedClips]
+                                                            newClips[selectedClipIndex].end = Math.max(selectedClip.start + 1, selectedClip.end - 0.5)
+                                                            newClips[selectedClipIndex].duration = newClips[selectedClipIndex].end - newClips[selectedClipIndex].start
+                                                            setProcessedClips(newClips)
+                                                        }}
+                                                        className="px-2 py-1 bg-gray-800 hover:bg-neon-green/20 rounded text-xs text-neon-green"
+                                                    >
+                                                        -0.5s
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const newClips = [...processedClips]
+                                                            newClips[selectedClipIndex].end = selectedClip.end + 0.5
+                                                            newClips[selectedClipIndex].duration = newClips[selectedClipIndex].end - newClips[selectedClipIndex].start
+                                                            setProcessedClips(newClips)
+                                                        }}
+                                                        className="px-2 py-1 bg-gray-800 hover:bg-neon-green/20 rounded text-xs text-neon-green"
+                                                    >
+                                                        +0.5s
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Aspect Ratio */}
+                                    <div className="space-y-2 pb-4 border-b border-gray-700">
+                                        <div className="font-mono text-xs text-neon-amber">&gt; ASPECT_RATIO</div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {['9:16', '16:9', '1:1'].map((ratio) => (
+                                                <button
+                                                    key={ratio}
+                                                    onClick={() => setAspectRatio(ratio as any)}
+                                                    className={`px-2 py-1 text-xs font-mono border rounded transition-all ${aspectRatio === ratio
+                                                            ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10'
+                                                            : 'border-gray-700 text-gray-500 hover:border-gray-500'
+                                                        }`}
+                                                >
+                                                    {ratio}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="text-[10px] text-gray-500 italic">
+                                            * Preview only. Export uses original.
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pb-4 border-b border-gray-700">
                                         <div className="font-mono text-xs text-neon-amber">
                                             &gt; EFFECTS
                                         </div>
-                                        <div className="space-y-1 md:space-y-2">
-                                            <div className="flex items-center justify-between font-mono text-xs">
-                                                <span className="text-gray-400">FADE_IN:</span>
-                                                <span className="text-neon-green">0.5s</span>
+                                        <div className="space-y-4">
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between font-mono text-xs">
+                                                    <span className="text-gray-400">FADE_IN:</span>
+                                                    <span className="text-neon-green">{(selectedClip.fadeIn || 0).toFixed(1)}s</span>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="5"
+                                                    step="0.1"
+                                                    value={selectedClip.fadeIn || 0}
+                                                    onChange={(e) => {
+                                                        const newClips = [...processedClips]
+                                                        newClips[selectedClipIndex].fadeIn = parseFloat(e.target.value)
+                                                        setProcessedClips(newClips)
+                                                    }}
+                                                    className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-neon-green [&::-webkit-slider-thumb]:rounded-full"
+                                                />
                                             </div>
-                                            <div className="flex items-center justify-between font-mono text-xs">
-                                                <span className="text-gray-400">FADE_OUT:</span>
-                                                <span className="text-neon-green">0.5s</span>
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between font-mono text-xs">
+                                                    <span className="text-gray-400">FADE_OUT:</span>
+                                                    <span className="text-neon-green">{(selectedClip.fadeOut || 0).toFixed(1)}s</span>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="5"
+                                                    step="0.1"
+                                                    value={selectedClip.fadeOut || 0}
+                                                    onChange={(e) => {
+                                                        const newClips = [...processedClips]
+                                                        newClips[selectedClipIndex].fadeOut = parseFloat(e.target.value)
+                                                        setProcessedClips(newClips)
+                                                    }}
+                                                    className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-neon-green [&::-webkit-slider-thumb]:rounded-full"
+                                                />
                                             </div>
                                         </div>
                                     </div>
