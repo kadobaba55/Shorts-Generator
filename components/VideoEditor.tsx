@@ -525,12 +525,6 @@ export default function VideoEditor({
                                         >
                                             [DOWNLOAD]
                                         </button>
-                                        <button
-                                            onClick={() => copyVideoUrl(selectedClip)}
-                                            className="w-full py-2 text-xs border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/10 transition-colors font-mono"
-                                        >
-                                            [📋 COPY LINK]
-                                        </button>
                                     </div>
                                 </>
                             )}

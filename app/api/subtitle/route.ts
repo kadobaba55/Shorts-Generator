@@ -155,11 +155,28 @@ export async function POST(request: NextRequest) {
         // If custom font/color provided, always use custom style
         const subtitleStyle = (font !== 'Impact' || primaryColor !== '#00FFFF') ? customStyle : (styles[style] || styles['viral'])
 
+        // Check for user session to improved Guest Mode logic
+        const { getServerSession } = await import("next-auth")
+        const { authOptions } = await import("@/lib/auth")
+        const session = await getServerSession(authOptions)
+        const isGuest = !session
+
         // Windows path escape specifically for FFmpeg subtitles filter
         // We need to use forward slashes and escape colon
         const escapedSrtPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:')
 
-        const burnSubsCmd = `ffmpeg -y -i "${inputPath}" -vf "subtitles='${escapedSrtPath}':force_style='${subtitleStyle}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputPath}"`
+        // Watermark filter setup
+        let vfFilter = `subtitles='${escapedSrtPath}':force_style='${subtitleStyle}'`
+
+        if (isGuest) {
+            // Add watermark for guests
+            // drawtext=text='KADOSTUDIO DEMO':x=(w-text_w)/2:y=h-50:fontsize=24:fontcolor=white@0.5:box=1:boxcolor=black@0.5
+            const watermarkText = 'KADOSTUDIO | FREE VERSION'
+            const watermarkFilter = `drawtext=text='${watermarkText}':x=(w-text_w)/2:y=h-60:fontsize=36:fontcolor=white@0.8:box=1:boxcolor=black@0.6:boxborderw=10`
+            vfFilter = `${vfFilter},${watermarkFilter}`
+        }
+
+        const burnSubsCmd = `ffmpeg -y -i "${inputPath}" -vf "${vfFilter}" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputPath}"`
 
         console.log('Burning subtitles...')
         await execAsync(burnSubsCmd, { timeout: 300000 }) // 5 min timeout
