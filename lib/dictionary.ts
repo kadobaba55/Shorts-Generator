@@ -202,6 +202,10 @@ export const dictionary = {
         'auth.name': 'Nom Complet',
         'auth.haveAccount': 'Vous avez déjà un compte ?',
         'auth.noAccount': 'Vous n\'avez pas de compte ?',
+        'auth.remember': 'Se souvenir de moi',
+        'auth.forgot': 'Mot de passe oublié ?',
+        'auth.login.submit': 'Se connecter',
+        'auth.register.submit': 'S\'inscrire',
 
         // Config
         'config.title': 'Configuration Vidéo',
@@ -277,6 +281,10 @@ export const dictionary = {
         'auth.name': 'Vollständiger Name',
         'auth.haveAccount': 'Hast du bereits ein Konto?',
         'auth.noAccount': 'Hast du noch kein Konto?',
+        'auth.remember': 'Angemeldet bleiben',
+        'auth.forgot': 'Passwort vergessen?',
+        'auth.login.submit': 'Einloggen',
+        'auth.register.submit': 'Registrieren',
 
         // Config
         'config.title': 'Videokonfiguration',
@@ -352,6 +360,10 @@ export const dictionary = {
         'auth.name': 'Nombre completo',
         'auth.haveAccount': '¿Ya tienes una cuenta?',
         'auth.noAccount': '¿No tienes una cuenta?',
+        'auth.remember': 'Recuérdame',
+        'auth.forgot': '¿Olvidaste tu contraseña?',
+        'auth.login.submit': 'Iniciar sesión',
+        'auth.register.submit': 'Registrarse',
 
         // Config
         'config.title': 'Configuración de video',
@@ -427,6 +439,10 @@ export const dictionary = {
         'auth.name': 'Nome Completo',
         'auth.haveAccount': 'Hai già un account?',
         'auth.noAccount': 'Non hai un account?',
+        'auth.remember': 'Ricordami',
+        'auth.forgot': 'Password dimenticata?',
+        'auth.login.submit': 'Accedi',
+        'auth.register.submit': 'Registrati',
 
         // Config
         'config.title': 'Configurazione Video',
@@ -502,6 +518,10 @@ export const dictionary = {
         'auth.name': 'Nome Completo',
         'auth.haveAccount': 'Já tem uma conta?',
         'auth.noAccount': 'Não tem uma conta?',
+        'auth.remember': 'Lembrar-me',
+        'auth.forgot': 'Esqueci a senha',
+        'auth.login.submit': 'Entrar',
+        'auth.register.submit': 'Registrar',
 
         // Config
         'config.title': 'Configuração de Vídeo',
