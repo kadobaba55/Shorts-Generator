@@ -5,6 +5,8 @@ import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
+import { motion } from 'framer-motion'
+import Image from 'next/image'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -41,77 +43,135 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-bg-terminal p-4">
-            <div className="w-full max-w-md bg-bg-card border border-gray-800 rounded-lg p-8">
+        <div className="min-h-screen flex items-center justify-center bg-kado-bg p-4 relative overflow-hidden">
+            {/* Background Effects */}
+            <div className="absolute top-1/4 left-0 w-96 h-96 bg-kado-primary/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-kado-secondary/20 rounded-full blur-3xl pointer-events-none" />
 
-                {/* Başlık */}
-                <div className="text-center mb-8">
-                    <h1 className="text-2xl font-semibold text-white mb-2">
-                        Giriş Yap
-                    </h1>
-                    <p className="text-sm text-gray-400">
-                        Hesabınıza giriş yapın
-                    </p>
-                </div>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative z-10 w-full max-w-md"
+            >
+                {/* Card */}
+                <div className="bg-kado-surface/80 backdrop-blur-lg border border-kado-border rounded-2xl p-8 shadow-lg">
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {error && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
-                            {error}
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
-                            placeholder="ornek@email.com"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">
-                            Şifre
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
-                            placeholder="••••••••"
-                            required
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full py-3 bg-neon-green text-black font-semibold rounded hover:bg-neon-green/80 transition-colors disabled:opacity-50"
-                    >
-                        {isLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-                    </button>
-                </form>
-
-                {/* Linkler */}
-                <div className="mt-6 text-center space-y-3">
-                    <p className="text-sm text-gray-400">
-                        Hesabınız yok mu?{' '}
-                        <Link href="/register" className="text-neon-green hover:underline">
-                            Kayıt Ol
+                    {/* Logo & Title */}
+                    <div className="text-center mb-8">
+                        <Link href="/" className="inline-flex items-center justify-center w-16 h-16 mx-auto mb-4 hover:scale-105 transition-transform">
+                            <Image
+                                src="/logo_final.png"
+                                alt="Kadostudio"
+                                width={64}
+                                height={64}
+                                className="object-contain"
+                            />
                         </Link>
-                    </p>
-                    <Link href="/" className="block text-sm text-gray-500 hover:text-white transition-colors">
-                        ← Ana Sayfa
-                    </Link>
+                        <h1 className="text-2xl font-heading font-bold text-kado-text mb-2">
+                            Tekrar Hoş Geldin! 👋
+                        </h1>
+                        <p className="text-sm text-kado-text-secondary font-body">
+                            Hesabınıza giriş yapın
+                        </p>
+                    </div>
+
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm flex items-center gap-2"
+                            >
+                                <span>⚠️</span>
+                                {error}
+                            </motion.div>
+                        )}
+
+                        <div>
+                            <label className="block text-sm text-kado-text-secondary mb-2 font-body">
+                                Email
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">📧</span>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="ornek@email.com"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-kado-text-secondary mb-2 font-body">
+                                Şifre
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">🔒</span>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="btn-primary w-full py-4 rounded-xl text-base"
+                        >
+                            {isLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="spinner w-5 h-5" />
+                                    Giriş yapılıyor...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    Giriş Yap
+                                    <span>→</span>
+                                </span>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Divider */}
+                    <div className="flex items-center gap-4 my-6">
+                        <div className="flex-1 h-px bg-kado-border" />
+                        <span className="text-xs text-kado-text-muted font-body">veya</span>
+                        <div className="flex-1 h-px bg-kado-border" />
+                    </div>
+
+                    {/* Google Login Placeholder */}
+                    <button
+                        type="button"
+                        className="w-full py-3 px-4 rounded-xl bg-kado-surface border border-kado-border hover:border-kado-primary transition-all flex items-center justify-center gap-3 text-kado-text font-body"
+                        onClick={() => toast('Google ile giriş yakında!')}
+                    >
+                        <span className="text-xl">🔵</span>
+                        Google ile Giriş
+                    </button>
+
+                    {/* Links */}
+                    <div className="mt-6 text-center space-y-3">
+                        <p className="text-sm text-kado-text-secondary font-body">
+                            Hesabınız yok mu?{' '}
+                            <Link href="/register" className="text-kado-primary hover:underline font-semibold">
+                                Kayıt Ol
+                            </Link>
+                        </p>
+                        <Link href="/" className="block text-sm text-kado-text-muted hover:text-kado-text transition-colors font-body">
+                            ← Ana Sayfa
+                        </Link>
+                    </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     )
 }

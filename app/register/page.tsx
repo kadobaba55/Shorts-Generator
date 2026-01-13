@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
+import { motion } from 'framer-motion'
+import Image from 'next/image'
 
 export default function RegisterPage() {
     const [name, setName] = useState('')
@@ -43,91 +45,156 @@ export default function RegisterPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-bg-terminal p-4">
-            <div className="w-full max-w-md bg-bg-card border border-gray-800 rounded-lg p-8">
+        <div className="min-h-screen flex items-center justify-center bg-kado-bg p-4 relative overflow-hidden">
+            {/* Background Effects */}
+            <div className="absolute top-1/3 right-0 w-96 h-96 bg-kado-secondary/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-1/3 left-0 w-96 h-96 bg-kado-primary/20 rounded-full blur-3xl pointer-events-none" />
 
-                {/* Başlık */}
-                <div className="text-center mb-8">
-                    <h1 className="text-2xl font-semibold text-white mb-2">
-                        Kayıt Ol
-                    </h1>
-                    <p className="text-sm text-gray-400">
-                        Yeni hesap oluşturun
-                    </p>
-                </div>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative z-10 w-full max-w-md"
+            >
+                {/* Card */}
+                <div className="bg-kado-surface/80 backdrop-blur-lg border border-kado-border rounded-2xl p-8 shadow-lg">
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {error && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
-                            {error}
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">
-                            İsim
-                        </label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
-                            placeholder="Adınız"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
-                            placeholder="ornek@email.com"
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">
-                            Şifre
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-bg-terminal border border-gray-700 rounded text-white focus:border-neon-green focus:outline-none transition-colors"
-                            placeholder="••••••••"
-                            required
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full py-3 bg-neon-green text-black font-semibold rounded hover:bg-neon-green/80 transition-colors disabled:opacity-50"
-                    >
-                        {isLoading ? 'Kayıt yapılıyor...' : 'Kayıt Ol'}
-                    </button>
-                </form>
-
-                {/* Linkler */}
-                <div className="mt-6 text-center space-y-3">
-                    <p className="text-sm text-gray-400">
-                        Zaten hesabınız var mı?{' '}
-                        <Link href="/login" className="text-neon-green hover:underline">
-                            Giriş Yap
+                    {/* Logo & Title */}
+                    <div className="text-center mb-8">
+                        <Link href="/" className="inline-flex items-center justify-center w-16 h-16 mx-auto mb-4 hover:scale-105 transition-transform">
+                            <Image
+                                src="/logo_final.png"
+                                alt="Kadostudio"
+                                width={64}
+                                height={64}
+                                className="object-contain"
+                            />
                         </Link>
-                    </p>
-                    <Link href="/" className="block text-sm text-gray-500 hover:text-white transition-colors">
-                        ← Ana Sayfa
-                    </Link>
+                        <h1 className="text-2xl font-heading font-bold text-kado-text mb-2">
+                            Hesap Oluştur 🚀
+                        </h1>
+                        <p className="text-sm text-kado-text-secondary font-body">
+                            Hemen başla, ücretsiz dene
+                        </p>
+                    </div>
+
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm flex items-center gap-2"
+                            >
+                                <span>⚠️</span>
+                                {error}
+                            </motion.div>
+                        )}
+
+                        <div>
+                            <label className="block text-sm text-kado-text-secondary mb-2 font-body">
+                                İsim
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">👤</span>
+                                <input
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="Adınız"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-kado-text-secondary mb-2 font-body">
+                                Email
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">📧</span>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="ornek@email.com"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-kado-text-secondary mb-2 font-body">
+                                Şifre
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">🔒</span>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="input pl-12"
+                                    placeholder="••••••••"
+                                    required
+                                    minLength={6}
+                                />
+                            </div>
+                            <p className="text-xs text-kado-text-muted mt-1">En az 6 karakter</p>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="btn-accent w-full py-4 rounded-xl text-base"
+                        >
+                            {isLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="spinner w-5 h-5" />
+                                    Kayıt yapılıyor...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    Kayıt Ol
+                                    <span>✨</span>
+                                </span>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Benefits */}
+                    <div className="mt-6 p-4 bg-kado-bg/50 rounded-xl border border-kado-border/50">
+                        <p className="text-xs text-kado-text-muted mb-2 font-body">Üyelik avantajları:</p>
+                        <ul className="space-y-1 text-xs text-kado-text-secondary font-body">
+                            <li className="flex items-center gap-2">
+                                <span className="text-kado-success">✓</span>
+                                3 ücretsiz video işleme kredisi
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <span className="text-kado-success">✓</span>
+                                AI altyazı ve analiz
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <span className="text-kado-success">✓</span>
+                                Watermark'sız export
+                            </li>
+                        </ul>
+                    </div>
+
+                    {/* Links */}
+                    <div className="mt-6 text-center space-y-3">
+                        <p className="text-sm text-kado-text-secondary font-body">
+                            Zaten hesabınız var mı?{' '}
+                            <Link href="/login" className="text-kado-primary hover:underline font-semibold">
+                                Giriş Yap
+                            </Link>
+                        </p>
+                        <Link href="/" className="block text-sm text-kado-text-muted hover:text-kado-text transition-colors font-body">
+                            ← Ana Sayfa
+                        </Link>
+                    </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     )
 }

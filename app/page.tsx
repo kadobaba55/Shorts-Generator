@@ -110,14 +110,18 @@ export default function Home() {
     }
 
     return (
-        <main className="min-h-screen bg-bg-terminal text-white relative">
+        <main className="min-h-screen bg-kado-bg text-kado-text relative overflow-hidden">
+
+            {/* Background Gradient Orbs */}
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-kado-primary/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-kado-secondary/20 rounded-full blur-3xl pointer-events-none" />
 
             {/* Header */}
-            <header className="border-b border-gray-800 bg-bg-card">
+            <header className="relative z-10 border-b border-kado-border/50 bg-kado-bg/80 backdrop-blur-lg sticky top-0">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        {/* Logo Icon */}
-                        <Link href="/" className="relative w-14 h-14 hover:opacity-80 transition-opacity animate-pulse-slow">
+                        {/* Logo */}
+                        <Link href="/" className="relative w-12 h-12 hover:scale-105 transition-transform">
                             <Image
                                 src="/logo_final.png"
                                 alt="Kadostudio"
@@ -126,40 +130,51 @@ export default function Home() {
                                 priority
                             />
                         </Link>
+                        <span className="hidden md:block font-heading font-bold text-xl text-kado-text">
+                            Kadostudio
+                        </span>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <Link href="/pricing" className="hidden md:block font-mono text-xs text-gray-500 hover:text-neon-cyan transition-colors border border-neon-cyan/30 px-3 py-1 rounded hover:bg-neon-cyan/5">
-                            [ UPGRADE_SYSTEM ]
+                    {/* Navigation */}
+                    <nav className="hidden md:flex items-center gap-6">
+                        <Link href="/" className="text-sm text-kado-text-secondary hover:text-kado-text transition-colors font-body">
+                            Özellikler
                         </Link>
+                        <Link href="/pricing" className="text-sm text-kado-text-secondary hover:text-kado-text transition-colors font-body">
+                            Fiyatlar
+                        </Link>
+                    </nav>
+
+                    {/* Auth Buttons */}
+                    <div className="flex items-center gap-3">
                         {session ? (
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 <Link
                                     href="/profile"
-                                    className="flex items-center gap-3 border border-neon-green/30 px-4 py-2 hover:border-neon-green hover:bg-neon-green/10 transition-all"
+                                    className="flex items-center gap-3 px-4 py-2 rounded-xl bg-kado-surface border border-kado-border hover:border-kado-primary transition-all"
                                 >
-                                    <div className="w-8 h-8 border-2 border-neon-green flex items-center justify-center font-pixel text-xs text-neon-green">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-kado-primary to-kado-secondary flex items-center justify-center font-heading font-bold text-sm text-white">
                                         {session.user?.name?.[0] || session.user?.email?.[0] || 'U'}
                                     </div>
-                                    <div className="flex flex-col items-start font-mono text-xs">
-                                        <span className="text-neon-green">{session.user?.name}</span>
-                                        <span className="text-neon-amber">{session.user?.tokens} CREDITS</span>
+                                    <div className="hidden sm:flex flex-col items-start">
+                                        <span className="text-sm font-body text-kado-text">{session.user?.name}</span>
+                                        <span className="text-xs text-kado-accent font-semibold">{session.user?.tokens} Kredi</span>
                                     </div>
                                 </Link>
                                 <button
                                     onClick={() => signOut()}
-                                    className="font-mono text-xs text-gray-500 hover:text-neon-red transition-colors"
+                                    className="btn-ghost text-sm px-3 py-2 rounded-lg"
                                 >
-                                    [LOGOUT]
+                                    Çıkış
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex items-center gap-4">
-                                <Link href="/login" className="font-mono text-sm text-neon-green hover:text-neon-amber transition-colors">
-                                    [LOGIN]
+                            <div className="flex items-center gap-3">
+                                <Link href="/login" className="btn-ghost text-sm px-4 py-2 rounded-lg">
+                                    Giriş
                                 </Link>
-                                <Link href="/register" className="btn-secondary text-sm px-4 py-2">
-                                    REGISTER
+                                <Link href="/register" className="btn-primary text-sm px-4 py-2 rounded-lg">
+                                    Kayıt Ol
                                 </Link>
                             </div>
                         )}
@@ -167,8 +182,8 @@ export default function Home() {
                 </div>
             </header>
 
-            {/* Content Area - Only Hero */}
-            <div className="container mx-auto px-4 pb-12">
+            {/* Content Area - Hero */}
+            <div className="relative z-10 container mx-auto px-4 pb-12">
                 <Hero
                     onVideoSubmit={handleDownload}
                     isDownloading={isDownloading}
@@ -178,9 +193,19 @@ export default function Home() {
             </div>
 
             {/* Footer */}
-            <footer className="border-t border-gray-800 py-6 mt-auto">
-                <div className="container mx-auto px-4 text-center font-mono text-xs text-gray-500">
-                    <p>© 2026 Kadostudio. Video içerikleri için yapay zeka destekli klip oluşturucu.</p>
+            <footer className="relative z-10 border-t border-kado-border/50 py-8 mt-auto">
+                <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <p className="text-sm text-kado-text-muted font-body">
+                        © 2026 Kadostudio. AI destekli video düzenleme platformu.
+                    </p>
+                    <div className="flex items-center gap-4">
+                        <Link href="/pricing" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
+                            Fiyatlar
+                        </Link>
+                        <a href="mailto:destek@kadostudio.dev" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
+                            Destek
+                        </a>
+                    </div>
                 </div>
             </footer>
         </main>
