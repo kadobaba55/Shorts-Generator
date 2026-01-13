@@ -103,6 +103,10 @@ module.exports = {
                     '0%, 100%': { opacity: '1' },
                     '50%': { opacity: '0.5' },
                 },
+                fadeIn: {
+                    'from': { opacity: '0', transform: 'translateY(-10px)' },
+                    'to': { opacity: '1', transform: 'translateY(0)' },
+                },
             },
             boxShadow: {
                 'glow-primary': '0 0 20px rgba(99, 102, 241, 0.3)',
