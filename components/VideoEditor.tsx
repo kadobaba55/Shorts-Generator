@@ -58,11 +58,67 @@ export default function VideoEditor({
     const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain')
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 })
 
+    // Timeline Dragging State
+    const [draggingHandle, setDraggingHandle] = useState<'start' | 'end' | null>(null)
+    const timelineRef = useRef<HTMLDivElement>(null)
+
+    // Handle Resize/Drag Logic
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent | TouchEvent) => {
+            if (!draggingHandle || !timelineRef.current || !videoRef.current) return
+
+            const rect = timelineRef.current.getBoundingClientRect()
+            const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+            const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
+            const percentage = x / rect.width
+            const time = percentage * (videoRef.current.duration || 1)
+
+            setProcessedClips((prev: ProcessedClip[]) => {
+                const newClips = [...prev]
+                const clip = newClips[selectedClipIndex]
+                const currentStart = clip.trimStart || 0
+                const currentEnd = clip.trimEnd || clip.duration
+                const minDuration = 1 // Minimum 1 second clip
+
+                if (draggingHandle === 'start') {
+                    // Update Start: Ensure it doesn't cross End
+                    const newStart = Math.min(time, currentEnd - minDuration)
+                    clip.trimStart = Math.max(0, newStart)
+                    clip.duration = currentEnd - clip.trimStart // Update visual duration although actual clip length logic might vary
+                } else {
+                    // Update End: Ensure it doesn't cross Start
+                    const newEnd = Math.max(time, currentStart + minDuration)
+                    clip.trimEnd = Math.min(videoRef.current?.duration || clip.end, newEnd)
+                    clip.duration = clip.trimEnd - currentStart
+                }
+
+                return newClips
+            })
+        }
+
+        const handleMouseUp = () => {
+            setDraggingHandle(null)
+        }
+
+        if (draggingHandle) {
+            window.addEventListener('mousemove', handleMouseMove)
+            window.addEventListener('touchmove', handleMouseMove)
+            window.addEventListener('mouseup', handleMouseUp)
+            window.addEventListener('touchend', handleMouseUp)
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('touchmove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+            window.removeEventListener('touchend', handleMouseUp)
+        }
+    }, [draggingHandle, selectedClipIndex, processedClips])
+
     const [zoom, setZoom] = useState(1)
     const [showClipList, setShowClipList] = useState(false)
     const [showProperties, setShowProperties] = useState(false)
     const videoRef = useRef<HTMLVideoElement>(null)
-    const timelineRef = useRef<HTMLDivElement>(null)
 
     const handleOpenSubtitleEditor = (index: number) => {
         // Navigate to dedicated subtitle page
@@ -487,14 +543,38 @@ export default function VideoEditor({
                                     onClick={handleTimelineClick}
                                     className="relative h-10 md:h-12 border-2 border-neon-green bg-bg-card cursor-pointer touch-none"
                                 >
-                                    {/* Progress Fill */}
+                                    {/* Progress Fill & Handles (Active Segment) */}
                                     <div
-                                        className="absolute top-0 left-0 h-full bg-neon-green/20 pointer-events-none"
+                                        className="absolute top-0 left-0 h-full bg-neon-green/10"
                                         style={{
                                             left: `${((selectedClip.trimStart || 0) / (videoRef.current?.duration || 1)) * 100}%`,
                                             width: `${(((selectedClip.trimEnd || selectedClip.duration) - (selectedClip.trimStart || 0)) / (videoRef.current?.duration || 1)) * 100}%`
                                         }}
-                                    />
+                                    >
+                                        {/* Left Handle (Start) */}
+                                        <div
+                                            onMouseDown={(e) => { e.stopPropagation(); setDraggingHandle('start'); }}
+                                            onTouchStart={(e) => { e.stopPropagation(); setDraggingHandle('start'); }}
+                                            className="absolute left-0 top-0 h-full w-6 -translate-x-1/2 cursor-ew-resize flex items-center justify-center group z-20 hover:bg-white/5"
+                                        >
+                                            <div className="h-3/4 w-1 bg-neon-green group-hover:w-1.5 transition-all shadow-[0_0_5px_#00ff41]" />
+                                            <div className="absolute -top-6 bg-neon-green text-black text-[10px] font-bold px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                START
+                                            </div>
+                                        </div>
+
+                                        {/* Right Handle (End) */}
+                                        <div
+                                            onMouseDown={(e) => { e.stopPropagation(); setDraggingHandle('end'); }}
+                                            onTouchStart={(e) => { e.stopPropagation(); setDraggingHandle('end'); }}
+                                            className="absolute right-0 top-0 h-full w-6 translate-x-1/2 cursor-ew-resize flex items-center justify-center group z-20 hover:bg-white/5"
+                                        >
+                                            <div className="h-3/4 w-1 bg-neon-green group-hover:w-1.5 transition-all shadow-[0_0_5px_#00ff41]" />
+                                            <div className="absolute -top-6 bg-neon-green text-black text-[10px] font-bold px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                END
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     {/* Playhead */}
                                     <div
