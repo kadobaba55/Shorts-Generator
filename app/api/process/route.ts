@@ -40,32 +40,17 @@ export async function POST(request: NextRequest) {
         const session = await getServerSession(authOptions)
         const ip = request.headers.get('x-forwarded-for') || 'anonymous'
 
-        let user = null
-        let isGuest = false
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "İşlem yapabilmek için giriş yapmalısınız." }, { status: 401 })
+        }
 
-        if (session?.user?.email) {
-            // Giriş yapmış kullanıcı
-            user = await prisma.user.findUnique({
-                where: { email: session.user.email }
-            })
+        // Giriş yapmış kullanıcı
+        user = await prisma.user.findUnique({
+            where: { email: session.user.email }
+        })
 
-            if (!user || user.tokens < 1) {
-                return NextResponse.json({ error: "Yetersiz token! Lütfen token yükleyin." }, { status: 403 })
-            }
-        } else {
-            // Guest kullanıcı - IP bazlı limit kontrolü
-            isGuest = true
-            const { checkGuestLimit, incrementGuestUsage } = require('@/lib/guestLimit')
-            const guestCheck = checkGuestLimit(ip)
-
-            if (!guestCheck.allowed) {
-                const hoursRemaining = Math.ceil(guestCheck.resetIn / (1000 * 60 * 60))
-                return NextResponse.json({
-                    error: `Ücretsiz günlük limitiniz doldu! Giriş yapın veya ${hoursRemaining} saat bekleyin.`,
-                    isGuest: true,
-                    resetIn: guestCheck.resetIn
-                }, { status: 403 })
-            }
+        if (!user || user.tokens < 1) {
+            return NextResponse.json({ error: "Yetersiz token! Lütfen token yükleyin." }, { status: 403 })
         }
 
         const { videoPath, clips, addSubtitles = true }: ProcessRequest = await request.json()
@@ -243,61 +228,51 @@ export async function POST(request: NextRequest) {
                 // Deduct token (database update) - Only for logged-in users
                 // Guest users don't have tokens, they use IP-based daily limit
                 if (user && !isGuest) {
-                    await prisma.$transaction([
-                        prisma.transaction.create({
-                            data: {
-                                userId: user.id,
-                                amount: -1,
-                                type: 'USAGE'
-                            }
-                        }),
-                        prisma.user.update({
-                            where: { id: user.id },
-                            data: { tokens: { decrement: 1 } }
-                        })
-                    ])
-                } else if (isGuest) {
-                    // Increment guest usage
-                    const { incrementGuestUsage } = require('@/lib/guestLimit')
-                    incrementGuestUsage(ip)
-                }
-
-                completeJob(job.id, 'process')
-
-                updateJob(job.id, {
-                    status: 'completed',
-                    progress: 100,
-                    result: {
-                        success: true,
-                        outputId,
-                        clips: processedClips,
-                        message: `${clips.length} klip başarıyla işlendi`
+                    if (user) {
+                        await Promise.all([
+                            prisma.user.update({
+                                where: { id: user.id },
+                                data: { tokens: { decrement: 1 } }
+                            })
+                        ])
                     }
-                })
 
-            } catch (error: any) {
-                console.error('Processing job error:', error)
-                completeJob(job.id, 'process')
-                updateJob(job.id, { status: 'error', error: error.message || 'İşlem hatası' })
+                    completeJob(job.id, 'process')
+
+                    updateJob(job.id, {
+                        status: 'completed',
+                        progress: 100,
+                        result: {
+                            success: true,
+                            outputId,
+                            clips: processedClips,
+                            message: `${clips.length} klip başarıyla işlendi`
+                        }
+                    })
+
+                } catch (error: any) {
+                    console.error('Processing job error:', error)
+                    completeJob(job.id, 'process')
+                    updateJob(job.id, { status: 'error', error: error.message || 'İşlem hatası' })
+                }
             }
-        }
 
         // Fire and forget
         startProcessing()
 
-        return NextResponse.json({
-            success: true,
-            jobId: job.id,
-            message: canStart ? 'işlem başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
-            queued: !canStart,
-            queuePosition: position
-        })
+            return NextResponse.json({
+                success: true,
+                jobId: job.id,
+                message: canStart ? 'işlem başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
+                queued: !canStart,
+                queuePosition: position
+            })
 
-    } catch (error: any) {
-        console.error('Process error:', error)
-        return NextResponse.json(
-            { error: error.message || 'Video işleme hatası' },
-            { status: 500 }
-        )
+        } catch (error: any) {
+            console.error('Process error:', error)
+            return NextResponse.json(
+                { error: error.message || 'Video işleme hatası' },
+                { status: 500 }
+            )
+        }
     }
-}

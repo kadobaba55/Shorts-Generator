@@ -159,7 +159,10 @@ export async function POST(request: NextRequest) {
         const { getServerSession } = await import("next-auth")
         const { authOptions } = await import("@/lib/auth")
         const session = await getServerSession(authOptions)
-        const isGuest = !session
+
+        // Apply watermark for FREE plan users
+        // Since we enforced login, everyone has a session, but we check plan
+        const isFreePlan = session?.user && (session.user as any).subscriptionPlan === 'FREE'
 
         // Windows path escape specifically for FFmpeg subtitles filter
         // We need to use forward slashes and escape colon
@@ -168,8 +171,8 @@ export async function POST(request: NextRequest) {
         // Watermark filter setup
         let vfFilter = `subtitles='${escapedSrtPath}':force_style='${subtitleStyle}'`
 
-        if (isGuest) {
-            // Add watermark for guests
+        if (isFreePlan) {
+            // Add watermark for guests/free users
             // drawtext=text='KADOSTUDIO DEMO':x=(w-text_w)/2:y=h-50:fontsize=24:fontcolor=white@0.5:box=1:boxcolor=black@0.5
             const watermarkText = 'KADOSTUDIO | FREE VERSION'
             const watermarkFilter = `drawtext=text='${watermarkText}':x=(w-text_w)/2:y=h-60:fontsize=36:fontcolor=white@0.8:box=1:boxcolor=black@0.6:boxborderw=10`

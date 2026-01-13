@@ -21,6 +21,13 @@ export default function Home() {
 
     // Download Video and redirect to config page
     const handleDownload = async (videoUrl: string) => {
+        // Enforce login
+        if (!session) {
+            toast.error('Video indirebilmek için giriş yapmalısınız')
+            router.push('/login')
+            return
+        }
+
         console.log('Starting download:', videoUrl)
         setUrl(videoUrl)
         setIsDownloading(true)

@@ -228,24 +228,7 @@ export default function ConfigPage() {
                 </div>
             </header>
 
-            {/* Guest Banner */}
-            {!session && (
-                <div className="bg-gradient-to-r from-neon-amber/20 to-neon-purple/20 border-b border-neon-amber/30">
-                    <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl">🎬</span>
-                            <div className="font-mono text-xs">
-                                <span className="text-neon-amber">Misafir Modu</span>
-                                <span className="text-gray-400 ml-2">| Günde 1 ücretsiz video | </span>
-                                <span className="text-neon-red">İndirmelerde filigran</span>
-                            </div>
-                        </div>
-                        <Link href="/register" className="btn-primary text-xs px-4 py-1.5">
-                            Kayıt Ol
-                        </Link>
-                    </div>
-                </div>
-            )}
+
 
             {/* Content */}
             <div className="container mx-auto px-4 pb-12">

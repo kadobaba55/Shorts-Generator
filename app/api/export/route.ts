@@ -29,10 +29,13 @@ export async function GET(request: NextRequest) {
 
     // Check if user is logged in
     const session = await getServerSession(authOptions)
-    const isGuest = !session?.user?.email
 
-    // If guest, add watermark
-    if (isGuest) {
+    // Check if user is on Free Plan
+    // Since login is mandatory, we just check the plan
+    const isFreePlan = (session?.user as any)?.subscriptionPlan === 'FREE'
+
+    // If Free Plan, add watermark
+    if (isFreePlan) {
         const watermarkPath = path.join(process.cwd(), 'public', 'watermark.png')
 
         // Check if watermark exists
