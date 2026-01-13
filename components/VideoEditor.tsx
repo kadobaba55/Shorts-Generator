@@ -12,6 +12,9 @@ interface ProcessedClip {
     duration: number
     hasSubtitles: boolean
     isProcessing: boolean
+    paddingStart?: number
+    trimStart?: number
+    trimEnd?: number
     fadeIn?: number
     fadeOut?: number
     volume?: number
@@ -51,6 +54,7 @@ export default function VideoEditor({
     const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null)
     const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9' | '1:1'>('9:16')
     const [objectFit, setObjectFit] = useState<'contain' | 'cover'>('contain')
+    const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 })
 
     const [zoom, setZoom] = useState(1)
     const [showClipList, setShowClipList] = useState(false)
@@ -79,13 +83,10 @@ export default function VideoEditor({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    videoPath: clip.videoPath,
-                    segments: segments,
-                    style: style?.id || 'viral',
-                    font: style?.font || 'Impact',
-                    primaryColor: style?.primaryColor || '#00FFFF',
-                    addEmojis: true,
-                    highlightKeywords: true
+                    highlightKeywords: true,
+                    // Pass current trim points to burn subtitles correctly
+                    trimStart: clip.trimStart || 0,
+                    trimEnd: clip.trimEnd || clip.duration // Fallback to full clip duration if no trim
                 })
             })
 
@@ -158,13 +159,20 @@ export default function VideoEditor({
 
     // Handle timeline click
     const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!timelineRef.current || !selectedClip) return
+        if (!timelineRef.current || !selectedClip || !videoRef.current) return
 
         const rect = timelineRef.current.getBoundingClientRect()
         const x = e.clientX - rect.left
         const percentage = x / rect.width
-        const newTime = percentage * selectedClip.duration
-        seekTo(Math.max(0, Math.min(newTime, selectedClip.duration)))
+
+        // Timeline represents the video FILE duration
+        // We need to know the actual file duration. 
+        // selectedClip.duration is confusing now (it was logic duration).
+        // Let's use videoRef.current.duration if available, otherwise guess.
+        const fileDuration = videoRef.current.duration || (selectedClip.trimEnd || 30) + 15
+
+        const newTime = percentage * fileDuration
+        seekTo(Math.max(0, Math.min(newTime, fileDuration)))
     }
 
     // Keyboard shortcuts
@@ -381,10 +389,24 @@ export default function VideoEditor({
                                     key={selectedClip?.subtitledPath || selectedClip?.videoPath}
                                     src={selectedClip?.subtitledPath || selectedClip?.videoPath}
                                     className={`w-full h-full ${objectFit === 'contain' ? 'object-contain' : 'object-cover'}`}
+                                    style={{
+                                        transform: `scale(${transform.scale}) translate(${transform.x}px, ${transform.y}px)`
+                                    }}
                                     playsInline
                                     onPlay={() => setIsPlaying(true)}
                                     onPause={() => setIsPlaying(false)}
                                     onEnded={() => setIsPlaying(false)}
+                                    onTimeUpdate={(e) => {
+                                        // Loop within trim range if specific logic needed, or just let it play
+                                        // For now let's just update time
+                                        const video = e.currentTarget
+                                        setCurrentTime(video.currentTime)
+
+                                        // Optional: Loop logic
+                                        // if (selectedClip.trimEnd && video.currentTime > selectedClip.trimEnd) {
+                                        //    video.currentTime = selectedClip.trimStart || 0
+                                        // }
+                                    }}
                                 />
 
                                 {/* Fit/Fill Toggle */}
@@ -456,17 +478,18 @@ export default function VideoEditor({
                                 >
                                     {/* Progress Fill */}
                                     <div
-                                        className="absolute top-0 left-0 h-full bg-neon-green/20"
+                                        className="absolute top-0 left-0 h-full bg-neon-green/20 pointer-events-none"
                                         style={{
-                                            width: `${(currentTime / (selectedClip?.duration || 1)) * 100}%`
+                                            left: `${((selectedClip.trimStart || 0) / (videoRef.current?.duration || 1)) * 100}%`,
+                                            width: `${(((selectedClip.trimEnd || selectedClip.duration) - (selectedClip.trimStart || 0)) / (videoRef.current?.duration || 1)) * 100}%`
                                         }}
                                     />
 
                                     {/* Playhead */}
                                     <div
-                                        className="absolute top-0 w-0.5 h-full bg-neon-green shadow-[0_0_10px_#00ff41]"
+                                        className="absolute top-0 w-0.5 h-full bg-neon-green shadow-[0_0_10px_#00ff41] z-10"
                                         style={{
-                                            left: `${(currentTime / (selectedClip?.duration || 1)) * 100}%`
+                                            left: `${(currentTime / (videoRef.current?.duration || 1)) * 100}%`
                                         }}
                                     >
                                         <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-neon-green" />
@@ -517,11 +540,11 @@ export default function VideoEditor({
                                         </div>
                                         <div className="flex justify-between font-mono text-xs">
                                             <span className="text-gray-500">DURATION:</span>
-                                            <span className="text-neon-green">{selectedClip.duration.toFixed(1)}s</span>
+                                            <span className="text-neon-green">{((selectedClip.trimEnd || selectedClip.duration) - (selectedClip.trimStart || 0)).toFixed(1)}s</span>
                                         </div>
                                         <div className="flex justify-between font-mono text-xs">
                                             <span className="text-gray-500">RANGE:</span>
-                                            <span className="text-neon-cyan">{formatTime(selectedClip.start)} - {formatTime(selectedClip.end)}</span>
+                                            <span className="text-neon-cyan">{(selectedClip.trimStart || 0).toFixed(1)}s - {(selectedClip.trimEnd || selectedClip.duration).toFixed(1)}s</span>
                                         </div>
                                     </div>
 

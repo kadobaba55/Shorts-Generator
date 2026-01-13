@@ -100,15 +100,33 @@ export async function POST(request: NextRequest) {
                 // Process clips sequentially to track progress accurately
                 for (let i = 0; i < clips.length; i++) {
                     const clip = clips[i]
+                    // Add padding (buffer) to start and end
+                    const BUFFER = 15 // seconds
+                    const originalStart = clip.start
+                    const originalEnd = clip.end
+
+                    // New start/end with padding
+                    const paddedStart = Math.max(0, originalStart - BUFFER)
+                    // We don't have total video duration here reliably without probing, 
+                    // but ffmpeg handles duration overshoot gracefully usually. 
+                    // To be safe for duration calc, we trust ffmpeg stops at EOF.
+                    // Let's assume user wants at least the clip duration + padding.
+                    const paddedEnd = originalEnd + BUFFER
+
+                    const duration = paddedEnd - paddedStart
+                    const paddingStart = originalStart - paddedStart
+
                     const clipOutputPath = path.join(OUTPUT_DIR, `${outputId}_clip_${i + 1}.mp4`)
-                    const duration = clip.end - clip.start
 
                     updateJob(job.id, { message: `Klip ${i + 1}/${clips.length} işleniyor...` })
 
-                    // 1. Face Detection (Fast)
+                    // 1. Face Detection (Fast) - Use the padded segment
                     let vfFilter = `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black`
                     try {
-                        const detectCmd = `python scripts/detect_face.py "${inputPath}" ${clip.start} ${duration}`
+                        // Detect face in the middle of value-added clip part (original start) to ensure subject focus
+                        // We ask detection for the original duration part, offset by paddingStart relative to the new cut?
+                        // Actually, detection script likely takes absolute file time.
+                        const detectCmd = `python scripts/detect_face.py "${inputPath}" ${originalStart} ${originalEnd - originalStart}`
                         const { stdout } = await execAsync(detectCmd, { timeout: 30000 })
                         const detection = JSON.parse(stdout)
 
@@ -139,7 +157,7 @@ export async function POST(request: NextRequest) {
                         console.log('FFmpeg Starting for:', clipOutputPath)
 
                         const ffmpegArgs = [
-                            '-y', '-ss', clip.start.toString(),
+                            '-y', '-ss', paddedStart.toString(),
                             '-i', inputPath,
                             '-t', duration.toString(),
                             '-vf', fullFilter,
@@ -212,7 +230,10 @@ export async function POST(request: NextRequest) {
                         const gcsUrl = await uploadToStorage(clipOutputPath, filename)
 
                         console.log('☁️ Uploaded to GCS:', gcsUrl)
-                        processedClips.push(gcsUrl)
+                        processedClips.push(JSON.stringify({
+                            url: gcsUrl,
+                            paddingStart
+                        }))
 
                         // Delete local file after upload
                         fs.unlinkSync(clipOutputPath)
@@ -221,7 +242,10 @@ export async function POST(request: NextRequest) {
                         console.warn('Falling back to local file path')
                         // Fallback to local file relative path for frontend
                         // Remove /public/ from path if it exists to make it a valid URL
-                        processedClips.push(`/output/${outputId}_clip_${i + 1}.mp4`)
+                        processedClips.push(JSON.stringify({
+                            url: `/output/${outputId}_clip_${i + 1}.mp4`,
+                            paddingStart
+                        }))
                     }
                 } // End loop
 

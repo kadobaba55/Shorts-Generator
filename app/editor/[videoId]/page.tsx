@@ -19,6 +19,10 @@ interface ProcessedClip {
     duration: number
     hasSubtitles: boolean
     isProcessing: boolean
+    // Padding info for manual timing
+    paddingStart?: number
+    trimStart?: number
+    trimEnd?: number
     // New editable properties
     fadeIn?: number
     fadeOut?: number
@@ -55,15 +59,37 @@ export default function EditorPage() {
                 setEditorData(data)
 
                 // Convert clips to ProcessedClip format
-                const clips: ProcessedClip[] = data.clips.map((clipPath, index) => ({
-                    id: `clip_${index + 1}`,
-                    videoPath: clipPath,
-                    start: data.originalClips[index]?.start || 0,
-                    end: data.originalClips[index]?.end || 30,
-                    duration: (data.originalClips[index]?.end || 30) - (data.originalClips[index]?.start || 0),
-                    hasSubtitles: false,
-                    isProcessing: false
-                }))
+                const clips: ProcessedClip[] = data.clips.map((clipDataRaw, index) => {
+                    let videoPath = clipDataRaw
+                    let paddingStart = 0
+
+                    try {
+                        const parsed = JSON.parse(clipDataRaw)
+                        if (parsed.url) {
+                            videoPath = parsed.url
+                            paddingStart = parsed.paddingStart || 0
+                        }
+                    } catch (e) {
+                        // Not JSON, assume string URL
+                    }
+
+                    const originalStart = data.originalClips[index]?.start || 0
+                    const originalEnd = data.originalClips[index]?.end || 30
+                    const duration = originalEnd - originalStart
+
+                    return {
+                        id: `clip_${index + 1}`,
+                        videoPath: videoPath,
+                        start: originalStart,
+                        end: originalEnd,
+                        duration: duration,
+                        hasSubtitles: false,
+                        isProcessing: false,
+                        paddingStart: paddingStart,
+                        trimStart: paddingStart,
+                        trimEnd: paddingStart + duration
+                    }
+                })
                 setProcessedClips(clips)
             } else {
                 toast.error('Klip verisi bulunamadı')
