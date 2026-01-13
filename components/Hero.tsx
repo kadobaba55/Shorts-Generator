@@ -35,7 +35,6 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     <span className="text-sm text-kado-text-secondary font-body">
                         AI destekli video düzenleme
                     </span>
-                    <span className="text-lg">✨</span>
                 </motion.div>
 
                 {/* Main Heading */}
@@ -75,7 +74,6 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                         <div className="relative m-[2px] bg-kado-surface rounded-2xl">
                             <div className="flex flex-col sm:flex-row items-stretch p-2 gap-2">
                                 <div className="relative flex-1 flex items-center">
-                                    <span className="absolute left-4 text-xl">🎬</span>
                                     <input
                                         type="text"
                                         value={url}
@@ -84,7 +82,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                         onBlur={() => setIsFocused(false)}
                                         placeholder="YouTube URL yapıştırın..."
                                         disabled={isDownloading}
-                                        className="w-full pl-12 pr-4 py-4 bg-transparent text-kado-text font-body text-base placeholder-kado-text-muted focus:outline-none disabled:opacity-50"
+                                        className="w-full px-4 py-4 bg-transparent text-kado-text font-body text-base placeholder-kado-text-muted focus:outline-none disabled:opacity-50"
                                     />
                                 </div>
                                 <button
@@ -98,10 +96,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                             İndiriliyor...
                                         </span>
                                     ) : (
-                                        <span className="flex items-center gap-2">
-                                            Başla
-                                            <span className="text-lg">🚀</span>
-                                        </span>
+                                        'Başla'
                                     )}
                                 </button>
                             </div>
@@ -116,8 +111,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                             className="mt-6 space-y-3"
                         >
                             <div className="flex items-center justify-between text-sm font-body">
-                                <span className="text-kado-text-secondary flex items-center gap-2">
-                                    <span className="animate-pulse">📥</span>
+                                <span className="text-kado-text-secondary">
                                     Video indiriliyor...
                                 </span>
                                 <span className="text-kado-primary font-semibold">{downloadProgress}%</span>
@@ -130,7 +124,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                             </div>
                             {estimatedTimeRemaining && (
                                 <p className="text-xs text-kado-text-muted text-center font-body">
-                                    ⏱️ Tahmini: {estimatedTimeRemaining} kaldı
+                                    Tahmini: {estimatedTimeRemaining} kaldı
                                 </p>
                             )}
                         </motion.div>
@@ -145,9 +139,9 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     className="grid grid-cols-3 gap-4 pt-8"
                 >
                     {[
-                        { icon: '✂️', title: 'Akıllı Kesim', desc: 'AI ile en iyi anları bul' },
-                        { icon: '💬', title: 'Otomatik Altyazı', desc: 'Viral stil yazı efektleri' },
-                        { icon: '🎯', title: 'Yüz Takibi', desc: 'Konuşmacıyı otomatik çerçevele' },
+                        { title: 'Akıllı Kesim', desc: 'AI ile en iyi anları bul' },
+                        { title: 'Otomatik Altyazı', desc: 'Viral stil yazı efektleri' },
+                        { title: 'Yüz Takibi', desc: 'Konuşmacıyı otomatik çerçevele' },
                     ].map((feature, i) => (
                         <motion.div
                             key={feature.title}
@@ -156,9 +150,6 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                             transition={{ delay: 0.4 + i * 0.1 }}
                             className="group p-4 rounded-xl bg-kado-surface/50 border border-kado-border/50 hover:border-kado-primary/50 hover:bg-kado-surface transition-all cursor-default"
                         >
-                            <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">
-                                {feature.icon}
-                            </div>
                             <h3 className="font-heading font-semibold text-kado-text mb-1">
                                 {feature.title}
                             </h3>

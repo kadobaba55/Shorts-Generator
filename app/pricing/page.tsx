@@ -13,7 +13,6 @@ const plans = [
         price: '0',
         period: 'ay',
         tokens: 5,
-        icon: '🎁',
         features: [
             '5 kredi / ay',
             'Standart işleme',
@@ -33,7 +32,6 @@ const plans = [
         price: '99',
         period: 'ay',
         tokens: 100,
-        icon: '⚡',
         features: [
             '100 kredi / ay',
             'Gelişmiş işleme',
@@ -52,7 +50,6 @@ const plans = [
         price: '299',
         period: 'ay',
         tokens: 500,
-        icon: '🚀',
         features: [
             '500 kredi / ay',
             'Premium işleme',
@@ -163,15 +160,12 @@ export default function PricingPage() {
                             >
                                 {plan.popular && (
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-kado-primary to-kado-secondary text-white text-xs font-semibold px-4 py-1 rounded-full">
-                                        ⭐ Önerilen
+                                        Önerilen
                                     </div>
                                 )}
 
-                                {/* Plan Icon & Name */}
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${plan.gradient} flex items-center justify-center text-2xl`}>
-                                        {plan.icon}
-                                    </div>
+                                {/* Plan Name */}
+                                <div className="mb-4">
                                     <h3 className="text-xl font-heading font-bold text-kado-text">{plan.name}</h3>
                                 </div>
 
@@ -221,14 +215,13 @@ export default function PricingPage() {
                     className="mt-16 grid md:grid-cols-2 gap-6"
                 >
                     {[
-                        { q: 'Kredi nedir?', a: 'Her işlenmiş video 1 kredi kullanır. Krediler her ay yenilenir.', icon: '🎫' },
-                        { q: 'İptal edebilir miyim?', a: 'Evet, istediğiniz zaman iptal edebilirsiniz. Dönem sonuna kadar aktif kalır.', icon: '🔄' },
-                        { q: 'Ödeme yöntemleri?', a: 'Kredi kartı, banka kartı ve havale ile ödeme yapabilirsiniz.', icon: '💳' },
-                        { q: 'Destek var mı?', a: 'Tüm planlarda email desteği, Pro ve üstünde öncelikli destek mevcuttur.', icon: '💬' },
+                        { q: 'Kredi nedir?', a: 'Her işlenmiş video 1 kredi kullanır. Krediler her ay yenilenir.' },
+                        { q: 'İptal edebilir miyim?', a: 'Evet, istediğiniz zaman iptal edebilirsiniz. Dönem sonuna kadar aktif kalır.' },
+                        { q: 'Ödeme yöntemleri?', a: 'Kredi kartı, banka kartı ve havale ile ödeme yapabilirsiniz.' },
+                        { q: 'Destek var mı?', a: 'Tüm planlarda email desteği, Pro ve üstünde öncelikli destek mevcuttur.' },
                     ].map((faq, i) => (
                         <div key={i} className="p-6 bg-kado-surface/50 border border-kado-border/50 rounded-xl">
-                            <div className="flex items-center gap-3 mb-2">
-                                <span className="text-xl">{faq.icon}</span>
+                            <div className="mb-2">
                                 <h3 className="font-heading font-semibold text-kado-text">{faq.q}</h3>
                             </div>
                             <p className="text-kado-text-secondary text-sm font-body">

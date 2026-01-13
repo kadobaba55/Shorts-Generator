@@ -70,7 +70,7 @@ export default function RegisterPage() {
                             />
                         </Link>
                         <h1 className="text-2xl font-heading font-bold text-kado-text mb-2">
-                            Hesap Oluştur 🚀
+                            Hesap Oluştur
                         </h1>
                         <p className="text-sm text-kado-text-secondary font-body">
                             Hemen başla, ücretsiz dene
@@ -83,9 +83,8 @@ export default function RegisterPage() {
                             <motion.div
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm flex items-center gap-2"
+                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm"
                             >
-                                <span>⚠️</span>
                                 {error}
                             </motion.div>
                         )}
@@ -94,52 +93,43 @@ export default function RegisterPage() {
                             <label className="block text-sm text-kado-text-secondary mb-2 font-body">
                                 İsim
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">👤</span>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="input pl-12"
-                                    placeholder="Adınız"
-                                    required
-                                />
-                            </div>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="input"
+                                placeholder="Adınız"
+                                required
+                            />
                         </div>
 
                         <div>
                             <label className="block text-sm text-kado-text-secondary mb-2 font-body">
                                 Email
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">📧</span>
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="input pl-12"
-                                    placeholder="ornek@email.com"
-                                    required
-                                />
-                            </div>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="input"
+                                placeholder="ornek@email.com"
+                                required
+                            />
                         </div>
 
                         <div>
                             <label className="block text-sm text-kado-text-secondary mb-2 font-body">
                                 Şifre
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">🔒</span>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="input pl-12"
-                                    placeholder="••••••••"
-                                    required
-                                    minLength={6}
-                                />
-                            </div>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input"
+                                placeholder="••••••••"
+                                required
+                                minLength={6}
+                            />
                             <p className="text-xs text-kado-text-muted mt-1">En az 6 karakter</p>
                         </div>
 
@@ -154,10 +144,7 @@ export default function RegisterPage() {
                                     Kayıt yapılıyor...
                                 </span>
                             ) : (
-                                <span className="flex items-center justify-center gap-2">
-                                    Kayıt Ol
-                                    <span>✨</span>
-                                </span>
+                                'Kayıt Ol'
                             )}
                         </button>
                     </form>
@@ -168,7 +155,7 @@ export default function RegisterPage() {
                         <ul className="space-y-1 text-xs text-kado-text-secondary font-body">
                             <li className="flex items-center gap-2">
                                 <span className="text-kado-success">✓</span>
-                                3 ücretsiz video işleme kredisi
+                                5 ücretsiz video işleme kredisi
                             </li>
                             <li className="flex items-center gap-2">
                                 <span className="text-kado-success">✓</span>

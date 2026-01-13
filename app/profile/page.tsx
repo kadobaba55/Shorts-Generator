@@ -218,7 +218,7 @@ export default function ProfilePage() {
                                 href="/pricing"
                                 className="btn-accent block w-full mt-6 py-3 rounded-xl text-center"
                             >
-                                💎 Kredi Satın Al
+                                Kredi Satın Al
                             </Link>
                         </motion.div>
 
@@ -230,12 +230,10 @@ export default function ProfilePage() {
                             className="bg-kado-surface/80 backdrop-blur-lg border border-kado-border rounded-2xl overflow-hidden"
                         >
                             <Link href="/" className="flex items-center gap-3 p-4 hover:bg-kado-surface-hover transition-colors border-b border-kado-border/50">
-                                <span className="text-xl">🎬</span>
                                 <span className="font-body text-kado-text">Yeni Video</span>
                                 <span className="ml-auto text-kado-text-muted">→</span>
                             </Link>
                             <Link href="/pricing" className="flex items-center gap-3 p-4 hover:bg-kado-surface-hover transition-colors">
-                                <span className="text-xl">💳</span>
                                 <span className="font-body text-kado-text">Fiyatlandırma</span>
                                 <span className="ml-auto text-kado-text-muted">→</span>
                             </Link>
@@ -252,12 +250,11 @@ export default function ProfilePage() {
                             className="grid grid-cols-3 gap-4"
                         >
                             {[
-                                { label: 'Kullanım', value: totalUsage, icon: '📊', color: 'text-kado-info' },
-                                { label: 'Satın Alınan', value: totalPurchases, icon: '💰', color: 'text-kado-success' },
-                                { label: 'Bakiye', value: session.user?.tokens || 0, icon: '✨', color: 'text-kado-accent' },
+                                { label: 'Kullanım', value: totalUsage, color: 'text-kado-info' },
+                                { label: 'Satın Alınan', value: totalPurchases, color: 'text-kado-success' },
+                                { label: 'Bakiye', value: session.user?.tokens || 0, color: 'text-kado-accent' },
                             ].map((stat, i) => (
                                 <div key={stat.label} className="bg-kado-surface/80 backdrop-blur-lg border border-kado-border rounded-xl p-4 text-center">
-                                    <div className="text-2xl mb-1">{stat.icon}</div>
                                     <div className={`text-2xl font-heading font-bold ${stat.color}`}>{stat.value}</div>
                                     <div className="text-xs text-kado-text-muted font-body">{stat.label}</div>
                                 </div>
@@ -288,7 +285,6 @@ export default function ProfilePage() {
                                         {transactions.length === 0 ? (
                                             <tr>
                                                 <td colSpan={3} className="px-6 py-12 text-center text-kado-text-muted">
-                                                    <div className="text-3xl mb-2">📭</div>
                                                     Henüz işlem yok
                                                 </td>
                                             </tr>
@@ -303,7 +299,7 @@ export default function ProfilePage() {
                                                             ? 'badge-success'
                                                             : 'badge-primary'
                                                             }`}>
-                                                            {transaction.type === 'PURCHASE' ? '💰 Satın Alma' : '🎬 Kullanım'}
+                                                            {transaction.type === 'PURCHASE' ? 'Satın Alma' : 'Kullanım'}
                                                         </span>
                                                     </td>
                                                     <td className={`px-6 py-4 text-right font-semibold ${transaction.amount > 0 ? 'text-kado-success' : 'text-kado-error'}`}>

@@ -68,7 +68,7 @@ export default function LoginPage() {
                             />
                         </Link>
                         <h1 className="text-2xl font-heading font-bold text-kado-text mb-2">
-                            Tekrar Hoş Geldin! 👋
+                            Tekrar Hoş Geldin
                         </h1>
                         <p className="text-sm text-kado-text-secondary font-body">
                             Hesabınıza giriş yapın
@@ -81,9 +81,8 @@ export default function LoginPage() {
                             <motion.div
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm flex items-center gap-2"
+                                className="p-3 bg-kado-error/10 border border-kado-error/30 rounded-xl text-kado-error text-sm"
                             >
-                                <span>⚠️</span>
                                 {error}
                             </motion.div>
                         )}
@@ -92,34 +91,28 @@ export default function LoginPage() {
                             <label className="block text-sm text-kado-text-secondary mb-2 font-body">
                                 Email
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">📧</span>
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="input pl-12"
-                                    placeholder="ornek@email.com"
-                                    required
-                                />
-                            </div>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="input"
+                                placeholder="ornek@email.com"
+                                required
+                            />
                         </div>
 
                         <div>
                             <label className="block text-sm text-kado-text-secondary mb-2 font-body">
                                 Şifre
                             </label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-kado-text-muted">🔒</span>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="input pl-12"
-                                    placeholder="••••••••"
-                                    required
-                                />
-                            </div>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input"
+                                placeholder="••••••••"
+                                required
+                            />
                         </div>
 
                         <button
@@ -133,10 +126,7 @@ export default function LoginPage() {
                                     Giriş yapılıyor...
                                 </span>
                             ) : (
-                                <span className="flex items-center justify-center gap-2">
-                                    Giriş Yap
-                                    <span>→</span>
-                                </span>
+                                'Giriş Yap'
                             )}
                         </button>
                     </form>
@@ -154,7 +144,6 @@ export default function LoginPage() {
                         className="w-full py-3 px-4 rounded-xl bg-kado-surface border border-kado-border hover:border-kado-primary transition-all flex items-center justify-center gap-3 text-kado-text font-body"
                         onClick={() => toast('Google ile giriş yakında!')}
                     >
-                        <span className="text-xl">🔵</span>
                         Google ile Giriş
                     </button>
 
