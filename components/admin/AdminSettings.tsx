@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast'
 
 export default function AdminSettings() {
     const [transcriptionMode, setTranscriptionMode] = useState<'local' | 'deepgram'>('deepgram')
+    const [storageMode, setStorageMode] = useState<'local' | 'cloud'>('cloud')
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -18,17 +19,19 @@ export default function AdminSettings() {
             const res = await fetch('/api/admin/settings')
             if (res.ok) {
                 const data = await res.json()
+                // Transcription
                 if (data.transcription_mode) {
-                    // Map old values to new if necessary, or just use as is if matches
                     const mode = data.transcription_mode
                     if (mode === 'cloud' || mode === 'cloud_force') {
-                        // Migrate legacy cloud to deepgram
                         setTranscriptionMode('deepgram')
                     } else {
                         setTranscriptionMode(mode as 'local' | 'deepgram')
                     }
-                } else {
-                    setTranscriptionMode('deepgram') // Default to Deepgram
+                }
+
+                // Storage
+                if (data.storage_mode) {
+                    setStorageMode(data.storage_mode as 'local' | 'cloud')
                 }
             }
         } catch (error) {
@@ -39,31 +42,28 @@ export default function AdminSettings() {
         }
     }
 
-    const handleModeChange = async (newMode: 'local' | 'deepgram') => {
-        if (newMode === transcriptionMode) return
-
+    const handleModeChange = async (key: string, value: string) => {
         setIsSaving(true)
+
         // Optimistic update
-        setTranscriptionMode(newMode)
+        if (key === 'transcription_mode') setTranscriptionMode(value as any)
+        if (key === 'storage_mode') setStorageMode(value as any)
 
         try {
             const res = await fetch('/api/admin/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: 'transcription_mode', value: newMode })
+                body: JSON.stringify({ key, value })
             })
 
             if (!res.ok) throw new Error('Failed to save')
 
-            let modeName = 'Yerel (Whisper)'
-            if (newMode === 'deepgram') modeName = 'Deepgram (Cloud)'
-
-            toast.success(`Mod değiştirildi: ${modeName}`)
+            toast.success(`Ayar güncellendi`)
         } catch (error) {
             console.error('Failed to save setting:', error)
             toast.error('Ayar kaydedilemedi')
-            // Revert
-            setTranscriptionMode(transcriptionMode)
+            // Revert (simplified: just refetch)
+            fetchSettings()
         } finally {
             setIsSaving(false)
         }
@@ -98,7 +98,7 @@ export default function AdminSettings() {
 
                         <div className="flex items-center bg-[#0F172A] p-1 rounded-lg border border-gray-700">
                             <button
-                                onClick={() => handleModeChange('deepgram')}
+                                onClick={() => handleModeChange('transcription_mode', 'deepgram')}
                                 disabled={isSaving}
                                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${transcriptionMode === 'deepgram'
                                     ? 'bg-gradient-to-r from-neon-green to-neon-cyan text-black shadow-md'
@@ -108,7 +108,7 @@ export default function AdminSettings() {
                                 🚀 Deepgram (Cloud)
                             </button>
                             <button
-                                onClick={() => handleModeChange('local')}
+                                onClick={() => handleModeChange('transcription_mode', 'local')}
                                 disabled={isSaving}
                                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${transcriptionMode === 'local'
                                     ? 'bg-gray-600 text-white shadow-md'
@@ -120,20 +120,42 @@ export default function AdminSettings() {
                         </div>
                     </div>
 
-                    {/* Info Box based on selection */}
-                    <div className={`text-xs p-3 rounded-lg border transition-colors duration-300
-                        ${transcriptionMode === 'local' ? 'bg-gray-500/10 border-gray-500/20 text-gray-300' : ''}
-                        ${transcriptionMode === 'deepgram' ? 'bg-neon-green/10 border-neon-green/20 text-neon-green' : ''}
-                    `}>
-                        {transcriptionMode === 'local' && (
-                            <span>ℹ️ <b>Yerel Mod (Whisper):</b> Sunucu işlemcisini kullanır. Ücretsizdir ancak yavaştır ve yüksek CPU tüketir.</span>
-                        )}
-                        {transcriptionMode === 'deepgram' && (
-                            <span>ℹ️ <b>Deepgram (Tavsiye Edilen):</b> Saniyeler içinde sonuç verir. Yüksek doğruluk ve düşük sunucu yükü sağlar. (API Key gerektirir)</span>
-                        )}
-                        {transcriptionMode !== 'local' && transcriptionMode !== 'deepgram' && (
-                            <span>⚠️ <b>Bilinmeyen Mod:</b> Lütfen geçerli bir seçenek belirleyin.</span>
-                        )}
+                    {/* Storage Mode Selector */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-kado-bg/50 rounded-xl border border-kado-border/50 hover:border-neon-cyan/30 transition-colors gap-4">
+                        <div className="space-y-1">
+                            <h3 className="text-kado-text font-medium text-lg">Depolama Alanı</h3>
+                            <p className="text-sm text-kado-text-secondary max-w-md">
+                                Yüklenen videoların nerede saklanacağını seçin.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center bg-[#0F172A] p-1 rounded-lg border border-gray-700">
+                            <button
+                                onClick={() => handleModeChange('storage_mode', 'cloud')}
+                                disabled={isSaving}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${storageMode === 'cloud'
+                                    ? 'bg-gradient-to-r from-neon-cyan to-blue-500 text-black shadow-md'
+                                    : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                ☁️ Cloudflare R2
+                            </button>
+                            <button
+                                onClick={() => handleModeChange('storage_mode', 'local')}
+                                disabled={isSaving}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${storageMode === 'local'
+                                    ? 'bg-gray-600 text-white shadow-md'
+                                    : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                📁 Local Disk
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Info */}
+                    <div className="text-xs text-gray-400 opacity-60">
+                        * Değişiklikler yeni yüklenen dosyalar için geçerli olur. Mevcut dosyalar taşınmaz.
                     </div>
                 </div>
             )}

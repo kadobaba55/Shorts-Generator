@@ -75,26 +75,45 @@ export default function AdminStatsCard({ stats, loading }: AdminStatsCardProps) 
                 </p>
             </div>
 
-            {/* Storage */}
+            {/* Storage (Dual) */}
             <div className="bg-bg-card border border-neon-cyan/30 rounded-xl p-4 relative overflow-hidden group hover:border-neon-cyan/50 transition-colors">
                 <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
                     <svg className="w-12 h-12 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                 </div>
-                <h3 className="text-gray-400 text-xs font-mono mb-1">STORAGE</h3>
-                <div className="text-2xl font-bold font-mono text-neon-cyan">
-                    {Math.round(stats.storage?.use || 0)}%
+                <h3 className="text-gray-400 text-xs font-mono mb-2">STORAGE</h3>
+
+                {/* Local */}
+                <div className="mb-3">
+                    <div className="flex justify-between text-[10px] text-gray-400 font-mono mb-1">
+                        <span>LOCAL (Disk)</span>
+                        <span className="text-neon-cyan">{stats.storageDetails?.local.percentage ?? 0}%</span>
+                    </div>
+                    <div className="w-full bg-gray-700/30 h-1.5 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-neon-cyan transition-all duration-500 ease-out"
+                            style={{ width: `${stats.storageDetails?.local.percentage ?? 0}%` }}
+                        />
+                    </div>
                 </div>
-                <div className="w-full bg-gray-700/30 h-1.5 mt-3 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-neon-cyan transition-all duration-500 ease-out"
-                        style={{ width: `${stats.storage?.use || 0}%` }}
-                    />
+
+                {/* Cloud */}
+                <div>
+                    <div className="flex justify-between text-[10px] text-gray-400 font-mono mb-1">
+                        <span>CLOUD (R2)</span>
+                        <span className="text-blue-400">{stats.storageDetails?.cloud.percentage ?? 0}%</span>
+                    </div>
+                    <div className="w-full bg-gray-700/30 h-1.5 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-blue-500 transition-all duration-500 ease-out"
+                            style={{ width: `${stats.storageDetails?.cloud.percentage ?? 0}%` }}
+                        />
+                    </div>
+                    <div className="text-[9px] text-gray-500 mt-1 text-right">
+                        {formatBytes(stats.storageDetails?.cloud.used ?? 0)} Used
+                    </div>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-2 font-mono">
-                    Used: {formatBytes(stats.storage?.used)} / {formatBytes(stats.storage?.size)}
-                </p>
             </div>
 
             {/* Uptime */}

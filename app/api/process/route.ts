@@ -8,6 +8,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
+import { handleClipStorage } from '@/lib/storage'
 
 const execAsync = promisify(exec)
 
@@ -207,25 +208,22 @@ export async function POST(request: NextRequest) {
                         })
                     })
 
-                    // 3. Upload to Cloudflare R2
+                    // 3. Storage Handling (Cloud or Local based on settings)
                     try {
-                        const { uploadFileToR2 } = require('@/lib/storage')
                         const filename = `cuts/${outputId}_clip_${i + 1}.mp4`
-                        updateJob(job.id, { message: `Klip ${i + 1} R2'ye yükleniyor...` })
+                        updateJob(job.id, { message: `Klip ${i + 1} kaydediliyor...` })
 
-                        const r2Url = await uploadFileToR2(clipOutputPath, filename, 'video/mp4')
+                        // handleClipStorage manages upload/move and cleanup
+                        const fileUrl = await handleClipStorage(clipOutputPath, filename)
 
-                        console.log('☁️ Uploaded to R2:', r2Url)
+                        console.log(`✅ Clip saved: ${fileUrl}`)
                         processedClips.push(JSON.stringify({
-                            url: r2Url,
+                            url: fileUrl,
                             paddingStart
                         }))
-
-                        // Delete local file after upload
-                        fs.unlinkSync(clipOutputPath)
-                    } catch (uploadError: any) {
-                        console.error('⚠️ R2 Upload Failed:', uploadError.message || uploadError)
-                        console.warn('Falling back to local file path')
+                    } catch (storageError: any) {
+                        console.error('⚠️ Storage Failed:', storageError.message || storageError)
+                        // Fallback to local path if storage handler fails completely
                         processedClips.push(JSON.stringify({
                             url: `/output/${outputId}_clip_${i + 1}.mp4`,
                             paddingStart
