@@ -192,8 +192,14 @@ export async function POST(req: NextRequest) {
         const { videoPath, language = 'tr', model = 'medium' } = body
 
         if (!videoPath) return NextResponse.json({ error: 'No video path' }, { status: 400 })
-        const inputPath = path.join(process.cwd(), 'public', videoPath)
-        if (!fs.existsSync(inputPath)) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+
+        let inputPath = videoPath
+        const isRemote = videoPath.startsWith('http')
+
+        if (!isRemote) {
+            inputPath = path.join(process.cwd(), 'public', videoPath)
+            if (!fs.existsSync(inputPath)) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+        }
 
         // Job Setup
         const job = createJob('subtitle')

@@ -32,13 +32,17 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const inputPath = path.join(process.cwd(), 'public', videoPath)
+        let inputPath = videoPath
+        const isRemote = videoPath.startsWith('http')
 
-        if (!fs.existsSync(inputPath)) {
-            return NextResponse.json(
-                { error: 'Video bulunamadı' },
-                { status: 404 }
-            )
+        if (!isRemote) {
+            inputPath = path.join(process.cwd(), 'public', videoPath)
+            if (!fs.existsSync(inputPath)) {
+                return NextResponse.json(
+                    { error: 'Video bulunamadı' },
+                    { status: 404 }
+                )
+            }
         }
 
         // Job Creation

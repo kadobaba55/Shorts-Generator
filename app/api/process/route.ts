@@ -26,8 +26,6 @@ interface ProcessRequest {
     addSubtitles?: boolean
 }
 
-
-
 // Helper to parse FFmpeg time format (HH:MM:SS.ms) to seconds
 function parseDuration(timeStr: string): number {
     const parts = timeStr.trim().split(':')
@@ -67,7 +65,17 @@ export async function POST(request: NextRequest) {
         const job = createJob('process')
         const outputId = Date.now().toString()
         const processedClips: string[] = []
-        const inputPath = path.join(process.cwd(), 'public', videoPath)
+
+        // Handle Remote URL (R2) vs Local File
+        let inputPath = videoPath
+        const isRemote = videoPath.startsWith('http')
+
+        if (!isRemote) {
+            inputPath = path.join(process.cwd(), 'public', videoPath)
+            if (!fs.existsSync(inputPath)) {
+                return NextResponse.json({ error: 'Video bulunamadı' }, { status: 404 })
+            }
+        }
 
         // Enqueue the job - check if it can start immediately
         const { canStart, position } = enqueueJob(job.id, 'process')
@@ -107,10 +115,7 @@ export async function POST(request: NextRequest) {
 
                     // New start/end with padding
                     const paddedStart = Math.max(0, originalStart - BUFFER)
-                    // We don't have total video duration here reliably without probing, 
-                    // but ffmpeg handles duration overshoot gracefully usually. 
-                    // To be safe for duration calc, we trust ffmpeg stops at EOF.
-                    // Let's assume user wants at least the clip duration + padding.
+
                     const paddedEnd = originalEnd + BUFFER
 
                     const duration = paddedEnd - paddedStart
@@ -123,9 +128,6 @@ export async function POST(request: NextRequest) {
                     // 1. Face Detection (Fast) - Use the padded segment
                     let vfFilter = `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black`
                     try {
-                        // Detect face in the middle of value-added clip part (original start) to ensure subject focus
-                        // We ask detection for the original duration part, offset by paddingStart relative to the new cut?
-                        // Actually, detection script likely takes absolute file time.
                         const detectCmd = `python scripts/detect_face.py "${inputPath}" ${originalStart} ${originalEnd - originalStart}`
                         const { stdout } = await execAsync(detectCmd, { timeout: 30000 })
                         const detection = JSON.parse(stdout)
@@ -137,7 +139,7 @@ export async function POST(request: NextRequest) {
                             vfFilter = `scale=-1:1920,crop=1080:1920:${cropX}:0`
                         }
                     } catch (e) {
-                        console.error('Face detection failed:', e)
+                        // Fallback silently to center crop/pad
                     }
 
                     // 2. FFmpeg Encoding with Progress
@@ -153,9 +155,6 @@ export async function POST(request: NextRequest) {
                             ffmpegPath = 'ffmpeg' // Assumes ffmpeg is installed via apt/yum
                         }
 
-                        console.log('FFmpeg Path:', ffmpegPath)
-                        console.log('FFmpeg Starting for:', clipOutputPath)
-
                         const ffmpegArgs = [
                             '-y', '-ss', paddedStart.toString(),
                             '-i', inputPath,
@@ -168,24 +167,18 @@ export async function POST(request: NextRequest) {
                             clipOutputPath
                         ]
 
-                        // Debug args
-                        console.log('FFmpeg Args:', ffmpegArgs.join(' '))
-
                         const child = spawn(ffmpegPath, ffmpegArgs)
 
                         let stderrLog = ''
 
                         child.stderr.on('data', (data) => {
                             const output = data.toString()
-                            stderrLog += output.slice(-500) // Keep last 500 chars for error logging
-
+                            stderrLog += output.slice(-500)
                             const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/)
 
                             if (timeMatch) {
                                 const currentTime = parseDuration(timeMatch[1])
                                 const clipProgress = Math.min((currentTime / duration) * 100, 100)
-
-                                // Calculate global progress based on current clip index
                                 const globalProgress = ((i * 100) + clipProgress) / clips.length
                                 updateJob(job.id, { progress: globalProgress })
                             }
@@ -193,55 +186,46 @@ export async function POST(request: NextRequest) {
 
                         child.on('close', (code) => {
                             if (code === 0) {
-                                // Double check if file exists
                                 if (fs.existsSync(clipOutputPath)) {
-                                    console.log('✅ File created successfully:', clipOutputPath)
                                     const stats = fs.statSync(clipOutputPath)
-                                    console.log('📦 File size:', stats.size)
                                     if (stats.size === 0) {
                                         reject(new Error('File created but size is 0 bytes'))
                                     } else {
                                         resolve()
                                     }
                                 } else {
-                                    console.error('❌ File NOT found after ffmpeg finished:', clipOutputPath)
                                     reject(new Error('FFmpeg finished but file not found'))
                                 }
                             } else {
                                 console.error(`FFmpeg failed with code ${code}`)
-                                console.error('Last stderr:', stderrLog)
                                 reject(new Error(`FFmpeg exited with code ${code}`))
                             }
                         })
 
                         child.on('error', (err) => {
-                            console.error('Spawn error:', err)
                             reject(err)
                         })
                     })
 
-                    // ... Previous FFmpeg code ...
-
-                    // 3. Upload to Google Cloud Storage (If configured)
+                    // 3. Upload to Cloudflare R2
                     try {
-                        // eslint-disable-next-line @typescript-eslint/no-var-requires
-                        const { uploadToStorage } = require('@/lib/storage')
-                        const filename = `${outputId}_clip_${i + 1}.mp4`
-                        const gcsUrl = await uploadToStorage(clipOutputPath, filename)
+                        const { uploadFileToR2 } = require('@/lib/storage')
+                        const filename = `cuts/${outputId}_clip_${i + 1}.mp4`
+                        updateJob(job.id, { message: `Klip ${i + 1} R2'ye yükleniyor...` })
 
-                        console.log('☁️ Uploaded to GCS:', gcsUrl)
+                        const r2Url = await uploadFileToR2(clipOutputPath, filename, 'video/mp4')
+
+                        console.log('☁️ Uploaded to R2:', r2Url)
                         processedClips.push(JSON.stringify({
-                            url: gcsUrl,
+                            url: r2Url,
                             paddingStart
                         }))
 
                         // Delete local file after upload
                         fs.unlinkSync(clipOutputPath)
                     } catch (uploadError: any) {
-                        console.error('⚠️ GCS Upload Failed:', uploadError.message || uploadError)
+                        console.error('⚠️ R2 Upload Failed:', uploadError.message || uploadError)
                         console.warn('Falling back to local file path')
-                        // Fallback to local file relative path for frontend
-                        // Remove /public/ from path if it exists to make it a valid URL
                         processedClips.push(JSON.stringify({
                             url: `/output/${outputId}_clip_${i + 1}.mp4`,
                             paddingStart
