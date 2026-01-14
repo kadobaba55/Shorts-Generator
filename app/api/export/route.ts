@@ -30,15 +30,8 @@ export async function POST(request: NextRequest) {
         const body: ExportRequest = await request.json()
         const { videoPath, trimStart, trimEnd, aspectRatio, transform } = body
 
-        // Clean up path to get absolute fs path
-        const relativePath = videoPath.startsWith('/') ? videoPath.slice(1) : videoPath
-        const fullInputPath = path.join(process.cwd(), 'public', relativePath)
-
-        if (!fs.existsSync(fullInputPath)) {
-            return NextResponse.json({ error: 'Input file not found' }, { status: 404 })
-        }
-
-        const outputDir = path.join(process.cwd(), 'public', 'output', 'renders')
+        // Create output directory locally for processing
+        const outputDir = path.join(process.cwd(), 'temp', 'renders')
         if (!fs.existsSync(outputDir)) {
             fs.mkdirSync(outputDir, { recursive: true })
         }
@@ -46,6 +39,20 @@ export async function POST(request: NextRequest) {
         const timestamp = Date.now()
         const outputFilename = `render_${timestamp}.mp4`
         const outputPath = path.join(outputDir, outputFilename)
+
+        // Handle Remote URL vs Local File
+        let inputPath = videoPath
+        const isRemote = videoPath.startsWith('http')
+
+        if (!isRemote) {
+            // If local path is relative (starts with /), make it absolute
+            const relativePath = videoPath.startsWith('/') ? videoPath.slice(1) : videoPath
+            inputPath = path.join(process.cwd(), 'public', relativePath)
+
+            if (!fs.existsSync(inputPath)) {
+                return NextResponse.json({ error: 'Input file not found' }, { status: 404 })
+            }
+        }
 
         // Calculate filter complex for FFmpeg
         // 1. Trim
@@ -143,25 +150,34 @@ export async function POST(request: NextRequest) {
 
         const scaleFilter = `scale=iw*${zoom}:-1` // Keep aspect
 
-        // We need to resolve the filter graph step by step or use complex expressions.
-        // crop=w=1920:h=1080:x=(iw-ow)/2 - ${panX}:y=(ih-oh)/2 - ${panY}
-
-        // IMPORTANT: panX/Y from frontend are heavily dependent on display size.
-        // Attempt to interpret them as "video pixels" (assuming frontend uses 1080p base).
-
         const cropFilter = `crop=${targetW}:${targetH}:(iw-ow)/2-${panX}:(ih-oh)/2-${panY}`
 
-        filterComplex = `[0:v]${scaleFilter},${cropFilter}[outv]`
+        // Setsar=1 ensures players handle aspect ratio correctly
+        filterComplex = `[0:v]${scaleFilter},${cropFilter},setsar=1[outv]`
 
         // Construct command
-        // -ss and -t for trimming
-        const ffmpegCmd = `ffmpeg -y -ss ${trimStart} -i "${fullInputPath}" -t ${duration} -filter_complex "${filterComplex}" -map "[outv]" -map 0:a -c:v libx264 -preset ultrafast -c:a aac "${outputPath}"`
+        // Use inputPath which is either absolute local path or URL
+        const ffmpegCmd = `ffmpeg -y -ss ${trimStart} -i "${inputPath}" -t ${duration} -filter_complex "${filterComplex}" -map "[outv]" -map 0:a -c:v libx264 -preset ultrafast -c:a aac "${outputPath}"`
 
         console.log('Rendering:', ffmpegCmd)
         await execAsync(ffmpegCmd)
 
-        const outputUrl = `/output/renders/${outputFilename}`
-        return NextResponse.json({ url: outputUrl })
+        // Upload to R2
+        try {
+            const { uploadFileToR2 } = require('@/lib/storage')
+            const r2Key = `renders/${outputFilename}`
+            console.log('Uploading render to R2...')
+
+            const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
+
+            // Clean up local render
+            fs.unlinkSync(outputPath)
+
+            return NextResponse.json({ url: publicUrl })
+        } catch (uploadError) {
+            console.error('R2 Upload failed for render:', uploadError)
+            throw new Error('Render upload failed')
+        }
 
     } catch (error: any) {
         console.error('Export error:', error)
