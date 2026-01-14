@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
                         const fileBuffer = fs.readFileSync(audioPath)
                         const fileBlob = new Blob([fileBuffer], { type: 'audio/wav' })
                         formData.append('file', fileBlob, 'audio.wav')
-                        formData.append('model', model)
+                        // formData.append('model', model) // REMOVED: API rejects model parameter
                         formData.append('language', language)
 
                         const apiKey = process.env.FREESUBTITLES_API_KEY || ''
