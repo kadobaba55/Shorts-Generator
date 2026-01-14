@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
 
                 // HYBRID LOGIC: External API vs Local Python
                 const USE_EXTERNAL = process.env.USE_EXTERNAL_SUBTITLES === 'true'
+                let externalSuccess = false
 
                 if (USE_EXTERNAL) {
                     updateJob(job.id, { message: 'Bulut sunucusuna yükleniyor (FreeSubtitles.ai)...' })
@@ -104,7 +105,8 @@ export async function POST(req: NextRequest) {
                             body: formData
                         })
 
-                        if (!uploadRes.ok) throw new Error(`External API Upload Failed: ${uploadRes.statusText}`)
+                        if (uploadRes.status === 429) throw new Error('External API Rate Limit (429)')
+                        if (!uploadRes.ok) throw new Error(`External API Upload Failed: ${uploadRes.status} ${uploadRes.statusText}`)
                         const uploadData = await uploadRes.json()
                         const externalId = uploadData.id // Assuming 'id' is returned based on typical patterns
 
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
                                     result = statusData // Check structure
                                     break
                                 } else if (statusData.status === 'failed') {
-                                    throw new Error('External transcription failed')
+                                    throw new Error('External transcription status: failed')
                                 }
                                 // progress?
                                 if (statusData.progress) {
@@ -153,23 +155,20 @@ export async function POST(req: NextRequest) {
                             progress: 100,
                             result: result // Ensure this matches expected structure
                         })
+                        externalSuccess = true
 
                     } catch (extError: any) {
-                        console.error('External API Error:', extError)
-                        // Fallback to local? Or fail?
-                        // Let's decide to fail for now to debug, or fallback?
-                        // User said "Hybrid", implying fallback.
-                        console.log('Falling back to local transcription...')
-                        updateJob(job.id, { message: 'Bulut hatası, yerel işlemciye geçiliyor...' })
-                        throw extError // Actually, throw to catch block but wait... 
-                        // To fallback, we shouldn't throw. We should continue to local code.
-                        // But structure makes it hard with `if/else`.
-                        // Let's re-structure: put local logic in function or use flag flip.
-                        throw extError // For now, let's stick to one method per request for simplicity.
+                        console.error('External API Error:', extError.message)
+                        // FALLBACK TRIGGER
+                        updateJob(job.id, { message: 'Bulut servisi yoğun, yerel işlemciye geçiliyor...' })
+                        // We do NOT throw here. We just let flow continue to Local block if externalSuccess is false.
                     }
 
-                } else {
-                    updateJob(job.id, { message: 'Yapay zeka sesi metne dönüştürüyor...' })
+                }
+
+                // LOCAL FALLBACK / DEFAULT LOGIC
+                if (!externalSuccess) {
+                    updateJob(job.id, { message: 'Yapay zeka sesi metne dönüştürüyor (Local)...' })
 
                     // Step 2: Run Python Transcription Script (LOCAL)
                     const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
@@ -207,7 +206,7 @@ export async function POST(req: NextRequest) {
 
                             // Detect model downloading state
                             if (str.includes('Downloading') || str.includes('%')) {
-                                updateJob(job.id, { message: 'AI Modeli ilk kez indiriliyor (Bu işlem birkaç dakika sürebilir)...' })
+                                updateJob(job.id, { message: 'AI Modeli indiriliyor (Bu işlem biraz sürebilir)...' })
                             }
                         })
 
