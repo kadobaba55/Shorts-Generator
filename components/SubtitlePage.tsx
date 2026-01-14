@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatTime } from '@/lib/estimateTime'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { SUBTITLE_PRESETS, ALL_FONTS, SubtitlePreset } from '@/lib/subtitlePresets'
+import { useLanguage } from './LanguageProvider'
 
 export interface SubtitleSegment {
     id: string
@@ -72,8 +73,12 @@ const hexToRgba = (hex: string, alpha: number) => {
 }
 
 export default function SubtitlePage({ videoPath, initialSegments = [], onSave, onBack }: SubtitlePageProps) {
+    // Localization
+    const { t } = useLanguage()
+
     // Core state
     const [segments, setSegments] = useState<SubtitleSegment[]>(initialSegments)
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
     const [isTranscribing, setIsTranscribing] = useState(false)
     const [loadingStatus, setLoadingStatus] = useState<string>('')
     const [secondsRemaining, setSecondsRemaining] = useState<number>(0)
@@ -173,17 +178,41 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     }, [waveformPeaks])
 
     // Undo/Redo Logic
-    const addToHistory = () => {
+    const applyHistoryState = (newIndex: number) => {
+        if (newIndex >= 0 && newIndex < history.length) {
+            setSegments(history[newIndex])
+            setHistoryIndex(newIndex)
+            setHasUnsavedChanges(true)
+        }
+    }
+
+    // Add to history
+    const pushToHistory = (newSegments: SubtitleSegment[]) => {
         const newHistory = history.slice(0, historyIndex + 1)
-        newHistory.push(JSON.parse(JSON.stringify(segments)))
-        if (newHistory.length > 10) newHistory.shift() // Keep last 10
+        newHistory.push(newSegments)
+
+        // Limit history size
+        if (newHistory.length > 10) {
+            newHistory.shift()
+        }
+
         setHistory(newHistory)
         setHistoryIndex(newHistory.length - 1)
+        setHasUnsavedChanges(true)
+    }
+
+    // Add style change to history (special case, doesn't change segments but we want undo)
+    // Actually style changes are currently just state, not undoable. 
+    // User requested undo/redo visual history, usually implies segments.
+    // If we want style undo, we need to store style in history too.
+    // For now, let's keep it simple as requested: "Undo/Redo ve klavye kısayolları"
+    // But we SHOULD mark as unsaved.
+    const markAsUnsaved = () => {
+        setHasUnsavedChanges(true)
     }
 
     const handleUndo = () => {
         if (historyIndex > 0) {
-            setHistoryIndex(historyIndex - 1)
             setSegments(JSON.parse(JSON.stringify(history[historyIndex - 1])))
         }
     }
@@ -218,32 +247,6 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
         }
     }, [initialSegments])
 
-    // Push state to history for undo/redo
-    const pushToHistory = useCallback((newSegments: SubtitleSegment[]) => {
-        setHistory(prev => {
-            const newHistory = prev.slice(0, historyIndex + 1)
-            newHistory.push(JSON.parse(JSON.stringify(newSegments)))
-            return newHistory
-        })
-        setHistoryIndex(prev => prev + 1)
-    }, [historyIndex])
-
-    // Undo
-    const undo = useCallback(() => {
-        if (historyIndex > 0) {
-            setHistoryIndex(prev => prev - 1)
-            setSegments(JSON.parse(JSON.stringify(history[historyIndex - 1])))
-        }
-    }, [history, historyIndex])
-
-    // Redo
-    const redo = useCallback(() => {
-        if (historyIndex < history.length - 1) {
-            setHistoryIndex(prev => prev + 1)
-            setSegments(JSON.parse(JSON.stringify(history[historyIndex + 1])))
-        }
-    }, [history, historyIndex])
-
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -273,14 +276,14 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             // Ctrl/Cmd + Z to undo
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 e.preventDefault()
-                undo()
+                handleUndo()
                 return
             }
 
             // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y to redo
             if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
                 e.preventDefault()
-                redo()
+                handleRedo()
                 return
             }
 
@@ -297,7 +300,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [currentStep, segments, undo, redo])
+    }, [currentStep, segments, history, historyIndex])
 
     // Toggle play/pause
     const togglePlay = () => {
@@ -457,11 +460,24 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                 primaryColor: customColor,
             }
             await onSave(segments, styleToSave)
+            setHasUnsavedChanges(false)
+            toast.success(t('success'))
         } catch (error) {
             console.error(error)
-            toast.error('Kaydetme hatası')
+            toast.error(t('error'))
         } finally {
             setIsSaving(false)
+        }
+    }
+
+    // Handle Back with confirmation
+    const handleBack = () => {
+        if (hasUnsavedChanges) {
+            if (window.confirm(t('editor.unsavedChanges'))) {
+                onBack()
+            }
+        } else {
+            onBack()
         }
     }
 
@@ -481,7 +497,8 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
         setBgBlur(preset.bgBlur || false)
         setBgRadius(preset.bgRadius ?? 8)
 
-        addToHistory()
+        // Mark as unsaved since style changed
+        markAsUnsaved()
     }
 
     // Highlight word (wrap in special markers)
@@ -504,19 +521,20 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             {/* Header */}
             <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-bg-card">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={onBack}
-                        className="font-mono text-xs text-neon-amber hover:text-neon-green transition-colors"
-                    >
-                        [&larr; BACK TO EDITOR]
-                    </button>
-                    <div className="h-4 w-px bg-gray-700"></div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-neon-green font-pixel">SUBTITLE_STUDIO</span>
-                        <span className="text-xs text-gray-500 font-mono hidden sm:inline">PRO</span>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handleBack}
+                            className="font-mono text-xs text-neon-amber hover:text-neon-green transition-colors"
+                        >
+                            [&larr; {t('editor.back')}]
+                        </button>
+                        <div className="h-4 w-px bg-gray-700"></div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-neon-green font-pixel">{t('editor.subtitleStudio')}</span>
+                            <span className="text-xs text-gray-500 font-mono hidden sm:inline">PRO</span>
+                        </div>
                     </div>
                 </div>
-
                 <div className="flex items-center gap-3">
                     {currentStep === 'edit' && (
                         <div className="flex items-center gap-4">
@@ -535,13 +553,22 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                             <div className="text-xs text-gray-500 font-mono hidden md:block">
                                 SPACE: Play/Pause  Ctrl+S: Save
                             </div>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="btn-primary px-6 py-2 text-sm ml-2 flex items-center gap-2"
-                            >
-                                {isSaving ? 'SAVING...' : '💾 SAVE & APPLY'}
-                            </button>
+                            {isSaving ? (
+                                <button
+                                    disabled
+                                    className="btn-primary px-6 py-2 text-sm ml-2 flex items-center gap-2 opacity-80 cursor-not-allowed"
+                                >
+                                    <span className="animate-spin">⏳</span>
+                                    {t('editor.saving')}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleSave}
+                                    className="btn-primary px-6 py-2 text-sm ml-2 flex items-center gap-2"
+                                >
+                                    💾 {t('editor.saveApply')}
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -945,8 +972,8 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
 
                             {/* Bottom Status */}
                             <div className="p-3 bg-black border-t border-gray-800 flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                                <div>{segments.length} altyazı segmenti</div>
-                                <div>Otomatik kayıt aktif</div>
+                                <div>{segments.length} {t('editor.segmentCount')}</div>
+                                <div>{t('editor.autoSave')}</div>
                             </div>
                         </div>
                     )}
@@ -954,68 +981,70 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             </div>
 
             {/* TIMELINE (Only in Edit Mode) */}
-            {currentStep === 'edit' && videoRef.current && (
-                <div className="h-48 bg-[#0a0a0a] border-t border-gray-800 flex flex-col relative group select-none">
-                    {/* Time Indicators */}
-                    <div className="h-6 flex items-center px-4 border-b border-gray-800 text-[10px] fon-mono text-gray-500">
-                        {formatTime(0)}
-                        <span className="mx-auto">TIMELINE EDITOR</span>
-                        {formatTime(videoRef.current.duration || 0)}
-                    </div>
+            {
+                currentStep === 'edit' && videoRef.current && (
+                    <div className="h-48 bg-[#0a0a0a] border-t border-gray-800 flex flex-col relative group select-none">
+                        {/* Time Indicators */}
+                        <div className="h-6 flex items-center px-4 border-b border-gray-800 text-[10px] fon-mono text-gray-500">
+                            {formatTime(0)}
+                            <span className="mx-auto">{t('editor.timeline')}</span>
+                            {formatTime(videoRef.current.duration || 0)}
+                        </div>
 
-                    {/* Waveform & Segments Container */}
-                    <div className="flex-1 relative overflow-hidden bg-[#050505]">
-                        {/* Waveform Canvas */}
-                        <canvas
-                            ref={canvasRef}
-                            className="absolute inset-0 w-full h-full opacity-30 pointer-events-none"
-                            width={1000}
-                            height={150}
-                        />
+                        {/* Waveform & Segments Container */}
+                        <div className="flex-1 relative overflow-hidden bg-[#050505]">
+                            {/* Waveform Canvas */}
+                            <canvas
+                                ref={canvasRef}
+                                className="absolute inset-0 w-full h-full opacity-30 pointer-events-none"
+                                width={1000}
+                                height={150}
+                            />
 
-                        {/* Playhead */}
-                        {videoRef.current.duration > 0 && (
-                            <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-neon-red z-20 pointer-events-none shadow-[0_0_10px_red]"
-                                style={{ left: `${(videoTime / videoRef.current.duration) * 100}%` }}
-                            >
-                                <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-neon-red transform rotate-45" />
-                            </div>
-                        )}
+                            {/* Playhead */}
+                            {videoRef.current.duration > 0 && (
+                                <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-neon-red z-20 pointer-events-none shadow-[0_0_10px_red]"
+                                    style={{ left: `${(videoTime / videoRef.current.duration) * 100}%` }}
+                                >
+                                    <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-neon-red transform rotate-45" />
+                                </div>
+                            )}
 
-                        {/* Segments Layer */}
-                        <div className="absolute inset-0 flex items-center px-2">
-                            {segments.map((seg, idx) => {
-                                if (!videoRef.current?.duration) return null
-                                const duration = videoRef.current.duration
-                                const left = (seg.start / duration) * 100
-                                const width = ((seg.end - seg.start) / duration) * 100
-                                const isActive = videoTime >= seg.start && videoTime <= seg.end
+                            {/* Segments Layer */}
+                            <div className="absolute inset-0 flex items-center px-2">
+                                {segments.map((seg, idx) => {
+                                    if (!videoRef.current?.duration) return null
+                                    const duration = videoRef.current.duration
+                                    const left = (seg.start / duration) * 100
+                                    const width = ((seg.end - seg.start) / duration) * 100
+                                    const isActive = videoTime >= seg.start && videoTime <= seg.end
 
-                                return (
-                                    <div
-                                        key={seg.id}
-                                        className={`absolute h-20 rounded cursor-pointer border overflow-hidden transition-all group/seg
+                                    return (
+                                        <div
+                                            key={seg.id}
+                                            className={`absolute h-20 rounded cursor-pointer border overflow-hidden transition-all group/seg
                                             ${isActive ? 'border-neon-green z-10 bg-neon-green/20' : 'border-gray-600 bg-gray-800/50 hover:border-gray-400'}
                                         `}
-                                        style={{ left: `${left}%`, width: `${width}%`, top: '10%' }}
-                                        onClick={() => {
-                                            if (videoRef.current) {
-                                                videoRef.current.currentTime = seg.start
-                                                setVideoTime(seg.start)
-                                            }
-                                        }}
-                                    >
-                                        <div className="px-1 py-0.5 text-[8px] truncate text-white/70 font-mono select-none">
-                                            {seg.text}
+                                            style={{ left: `${left}%`, width: `${width}%`, top: '10%' }}
+                                            onClick={() => {
+                                                if (videoRef.current) {
+                                                    videoRef.current.currentTime = seg.start
+                                                    setVideoTime(seg.start)
+                                                }
+                                            }}
+                                        >
+                                            <div className="px-1 py-0.5 text-[8px] truncate text-white/70 font-mono select-none">
+                                                {seg.text}
+                                            </div>
                                         </div>
-                                    </div>
-                                )
-                            })}
+                                    )
+                                })}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Keyboard Help Modal */}
             <AnimatePresence>
@@ -1035,33 +1064,33 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                             className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
                         >
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent">Keyboard Shortcuts</h3>
+                                <h3 className="text-xl font-bold bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent">{t('help.keyboardShortcuts')}</h3>
                                 <button onClick={() => setShowKeyboardHelp(false)} className="text-gray-500 hover:text-white">✕</button>
                             </div>
 
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-gray-400">Play / Pause</span>
+                                    <span className="text-gray-400">{t('help.playPause')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">SPACE</code>
                                 </div>
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-gray-400">Undo</span>
+                                    <span className="text-gray-400">{t('help.undo')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + Z</code>
                                 </div>
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-gray-400">Redo</span>
+                                    <span className="text-gray-400">{t('help.redo')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + Shift + Z</code>
                                 </div>
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-gray-400">Save</span>
+                                    <span className="text-gray-400">{t('help.save')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + S</code>
                                 </div>
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-gray-400">Split Segment</span>
+                                    <span className="text-gray-400">{t('help.split')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">S</code>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-gray-400">Merge with Next</span>
+                                    <span className="text-gray-400">{t('help.merge')}</span>
                                     <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">M</code>
                                 </div>
                             </div>
@@ -1073,6 +1102,6 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                     </motion.div>
                 )}
             </AnimatePresence>
-        </main>
+        </main >
     )
 }

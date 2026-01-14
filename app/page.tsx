@@ -203,7 +203,7 @@ export default function Home() {
                         {t('footer.copyright')}
                     </p>
                     <div className="flex items-center gap-4">
-                        <a href="mailto:destek@kadostudio.dev" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
+                        <a href="kadostudiomarketing@gmail.com" className="text-sm text-kado-text-secondary hover:text-kado-primary transition-colors">
                             {t('footer.support')}
                         </a>
                     </div>

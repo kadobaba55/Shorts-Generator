@@ -39,7 +39,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
 
     const t = (key: Key): string => {
-        const value = dictionary[language][key]
+        const value = (dictionary[language] as any)[key]
         return value !== undefined ? value : key
     }
 
