@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import fs from 'fs'
 
 // Initialize S3 Client (R2)
@@ -14,6 +14,69 @@ const s3Client = new S3Client({
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || 'shorts-bucket'
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || '' // e.g. https://pub-xxxx.r2.dev
 
+const QUOTA_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
+const QUOTA_TARGET_BYTES = 9 * 1024 * 1024 * 1024 // 9 GB target after cleanup
+
+async function checkAndEnforceQuota() {
+    try {
+        console.log('🔍 Checking R2 storage quota...')
+        let continuationToken: string | undefined = undefined
+        let totalSize = 0
+        const allObjects: { Key: string; Size: number; LastModified: Date }[] = []
+
+        // 1. List all objects
+        do {
+            const command = new ListObjectsV2Command({
+                Bucket: BUCKET_NAME,
+                ContinuationToken: continuationToken
+            })
+            const response = await s3Client.send(command) as any
+
+            if (response.Contents) {
+                for (const obj of response.Contents) {
+                    if (obj.Key && obj.Size !== undefined && obj.LastModified) {
+                        totalSize += obj.Size
+                        allObjects.push({
+                            Key: obj.Key,
+                            Size: obj.Size,
+                            LastModified: obj.LastModified
+                        })
+                    }
+                }
+            }
+            continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+        } while (continuationToken)
+
+        console.log(`📊 Current R2 Usage: ${(totalSize / 1024 / 1024).toFixed(2)} MB / ${(QUOTA_LIMIT_BYTES / 1024 / 1024).toFixed(2)} MB`)
+
+        // 2. Check if over limit
+        if (totalSize > QUOTA_LIMIT_BYTES) {
+            console.log('⚠️ Quota exceeded! Starting cleanup...')
+
+            // Sort by oldest first
+            allObjects.sort((a, b) => a.LastModified.getTime() - b.LastModified.getTime())
+
+            let deletedSize = 0
+            const deletedCount = 0
+
+            for (const obj of allObjects) {
+                if (totalSize - deletedSize <= QUOTA_TARGET_BYTES) {
+                    break // Target reached
+                }
+
+                console.log(`🗑️ Deleting old file: ${obj.Key} (${(obj.Size / 1024 / 1024).toFixed(2)} MB)`)
+                await deleteFileFromR2(obj.Key)
+                deletedSize += obj.Size
+            }
+
+            console.log(`✅ Cleanup complete. Freed ${(deletedSize / 1024 / 1024).toFixed(2)} MB.`)
+        }
+
+    } catch (error) {
+        console.error('Quota Enforcement Error:', error)
+    }
+}
+
 export async function uploadFileToR2(filePath: string, key: string, contentType: string = 'video/mp4') {
     try {
         const fileStream = fs.createReadStream(filePath)
@@ -27,9 +90,9 @@ export async function uploadFileToR2(filePath: string, key: string, contentType:
 
         await s3Client.send(command)
 
-        // Return the public URL
-        // If PUBLIC_URL is missing, this will return just the slash path, which won't work 
-        // unless frontend handles it. But we expect PUBLIC_URL to be set.
+        // Trigger quota check in background (fire and forget)
+        checkAndEnforceQuota().catch(err => console.error('Background quota check failed:', err))
+
         return `${PUBLIC_URL}/${key}`
     } catch (error) {
         console.error('R2 Upload Error:', error)
