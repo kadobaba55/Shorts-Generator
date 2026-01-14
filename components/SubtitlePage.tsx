@@ -70,6 +70,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     const [videoTime, setVideoTime] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [transcribeLanguage, setTranscribeLanguage] = useState('tr')
     const videoRef = useRef<HTMLVideoElement>(null)
 
     // Styling state
@@ -207,7 +208,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             const res = await fetch('/api/transcribe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoPath })
+                body: JSON.stringify({ videoPath, language: transcribeLanguage })
             })
 
             if (!res.ok) {
@@ -495,21 +496,38 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                 {/* Right: Editor Panels */}
                 <div className="w-full lg:w-1/2 flex flex-col bg-[#0f0f0f] flex-1">
                     {currentStep === 'transcribe' ? (
-                        <div className="flex-1 flex flex-col items-center justify-center space-y-8 p-10">
-                            <div className="w-24 h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
-                                <span className="text-4xl">🎙️</span>
+                        <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-6 lg:p-10">
+                            <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
+                                <span className="text-3xl lg:text-4xl">🎙️</span>
                             </div>
                             <div className="text-center">
-                                <h3 className="text-3xl font-bold text-white mb-2">AI Transkripsiyon</h3>
+                                <h3 className="text-2xl lg:text-3xl font-bold text-white mb-2">AI Transkripsiyon</h3>
                                 <p className="text-gray-400 text-sm max-w-sm mx-auto">
-                                    Videodaki konuşmaları yapay zeka ile otomatik olarak metne dönüştür ve zamanla.
+                                    Videodaki konuşmaları yapay zeka ile otomatik olarak metne dönüştür.
                                 </p>
+                            </div>
+
+                            {/* Language Selection */}
+                            <div className="w-full max-w-xs space-y-2">
+                                <label className="font-mono text-xs text-gray-400 block text-center">Video Dili</label>
+                                <select
+                                    value={transcribeLanguage}
+                                    onChange={(e) => setTranscribeLanguage(e.target.value)}
+                                    className="w-full bg-gray-900 border border-gray-700 text-neon-green rounded-lg px-4 py-3 font-mono text-sm focus:border-neon-green outline-none"
+                                >
+                                    <option value="tr">🇹🇷 Türkçe</option>
+                                    <option value="en">🇺🇸 English</option>
+                                    <option value="de">🇩🇪 Deutsch</option>
+                                    <option value="es">🇪🇸 Español</option>
+                                    <option value="fr">🇫🇷 Français</option>
+                                    <option value="auto">🌐 Otomatik Algıla</option>
+                                </select>
                             </div>
 
                             <button
                                 onClick={handleTranscribe}
                                 disabled={isTranscribing}
-                                className="btn-primary px-12 py-5 text-xl flex items-center gap-3 shadow-[0_0_30px_rgba(74,222,128,0.3)] hover:shadow-[0_0_50px_rgba(74,222,128,0.5)] transition-all"
+                                className="btn-primary px-10 lg:px-12 py-4 lg:py-5 text-lg lg:text-xl flex items-center gap-3 shadow-[0_0_30px_rgba(74,222,128,0.3)] hover:shadow-[0_0_50px_rgba(74,222,128,0.5)] transition-all"
                             >
                                 {isTranscribing ? (
                                     <div className="flex flex-col items-center">

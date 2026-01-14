@@ -125,44 +125,7 @@ export default function ConfigStep({
                         </div>
                     )}
 
-                    {/* Language Selection */}
-                    <div className="space-y-2">
-                        <label className="font-mono text-xs md:text-sm text-neon-amber">
-                            &gt; {t('config.language')}:
-                        </label>
-                        <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-700 text-neon-green rounded px-3 py-2 font-mono text-xs md:text-sm focus:border-neon-green outline-none"
-                        >
-                            <option value="tr">🇹🇷 TURKISH</option>
-                            <option value="en">🇺🇸 ENGLISH</option>
-                            <option value="de">🇩🇪 GERMAN</option>
-                            <option value="es">🇪🇸 SPANISH</option>
-                            <option value="fr">🇫🇷 FRENCH</option>
-                            <option value="auto">🌐 {t('config.auto')}</option>
-                        </select>
-                    </div>
 
-                    {/* Whisper Model Selection */}
-                    <div className="space-y-2">
-                        <label className="font-mono text-xs md:text-sm text-neon-amber">
-                            &gt; {t('config.model')}:
-                        </label>
-                        <select
-                            value={whisperModel}
-                            onChange={(e) => setWhisperModel(e.target.value as any)}
-                            className="w-full bg-gray-900 border border-gray-700 text-neon-green rounded px-3 py-2 font-mono text-xs md:text-sm focus:border-neon-green outline-none"
-                        >
-                            <option value="tiny">⚡ TINY - Fast</option>
-                            <option value="base">🚀 BASE - Balanced</option>
-                            <option value="small">⚖️ SMALL - Better</option>
-                            <option value="medium">🎯 MEDIUM - Best</option>
-                        </select>
-                        <p className="font-mono text-[10px] md:text-xs text-gray-500">
-                            // Faster = less accurate
-                        </p>
-                    </div>
 
                     {/* Mode Toggle with Sliding UI */}
                     <div className="border border-neon-cyan/30 p-3 md:p-4 bg-bg-card space-y-3">
