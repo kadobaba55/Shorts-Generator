@@ -16,9 +16,19 @@ const PUBLIC_URL = process.env.R2_PUBLIC_URL || '' // e.g. https://pub-xxxx.r2.d
 
 const QUOTA_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
 const QUOTA_TARGET_BYTES = 9 * 1024 * 1024 * 1024 // 9 GB target after cleanup
+const CHECK_COOLDOWN_MS = 5 * 60 * 1000 // Check at most every 5 minutes
+
+let lastCheckTime = 0
+let isChecking = false
 
 async function checkAndEnforceQuota() {
+    // 1. Throttling & Locking
+    const now = Date.now()
+    if (isChecking) return // Already running
+    if (now - lastCheckTime < CHECK_COOLDOWN_MS) return // Too soon
+
     try {
+        isChecking = true
         console.log('🔍 Checking R2 storage quota...')
         let continuationToken: string | undefined = undefined
         let totalSize = 0
@@ -72,8 +82,11 @@ async function checkAndEnforceQuota() {
             console.log(`✅ Cleanup complete. Freed ${(deletedSize / 1024 / 1024).toFixed(2)} MB.`)
         }
 
+        lastCheckTime = Date.now()
     } catch (error) {
         console.error('Quota Enforcement Error:', error)
+    } finally {
+        isChecking = false
     }
 }
 
