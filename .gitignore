@@ -44,3 +44,10 @@ temp/
 
 /app/generated/prisma
 version.json
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+prisma/*.db
+prisma/*.db-journal
