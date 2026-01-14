@@ -142,23 +142,43 @@ export async function POST(req: NextRequest) {
                     parseOutput(data)
                 })
 
-                child.on('close', (code) => {
-                    // Always release the slot when done
-                    completeJob(job.id, 'download')
-
+                child.on('close', async (code) => {
                     if (code === 0) {
-                        updateJob(job.id, {
-                            status: 'completed',
-                            progress: 100,
-                            result: {
-                                videoId,
-                                videoPath: `/videos/${videoId}.mp4`,
-                                title: videoInfo.title,
-                                duration: videoInfo.duration,
-                                thumbnail: videoInfo.thumbnail
-                            }
-                        })
+                        try {
+                            const { uploadFileToR2, deleteFileFromR2 } = require('@/lib/storage')
+                            updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️' })
+
+                            // Upload to R2
+                            const r2Key = `uploads/${videoId}.mp4`
+                            const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
+
+                            // Delete local file
+                            fs.unlinkSync(outputPath)
+
+                            // Complete Job with Public URL
+                            completeJob(job.id, 'download')
+
+                            updateJob(job.id, {
+                                status: 'completed',
+                                progress: 100,
+                                result: {
+                                    videoId,
+                                    videoPath: publicUrl, // Now returns the remote URL
+                                    title: videoInfo.title,
+                                    duration: videoInfo.duration,
+                                    thumbnail: videoInfo.thumbnail
+                                }
+                            })
+                        } catch (uploadError: any) {
+                            console.error('R2 Upload Failed:', uploadError)
+                            // If upload fails, maybe keep local file or fail job?
+                            // Let's fail job for now to ensure consistency
+                            completeJob(job.id, 'download')
+                            updateJob(job.id, { status: 'error', error: `R2 Yükleme Hatası: ${uploadError.message}` })
+                        }
                     } else {
+                        // ... existing error logic ...
+                        completeJob(job.id, 'download')
                         console.error('Download failed with code', code)
                         console.error('Error output:', errorOutput)
 

@@ -1,57 +1,52 @@
-import { Storage } from '@google-cloud/storage'
-import path from 'path'
-
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import fs from 'fs'
 
-// Credentials path
-const KEY_PATH = path.join(process.cwd(), 'google-credentials.json')
-const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'shorts-bucket-v1'
-
-let storage: Storage | null = null
-
-try {
-    // Eğer dosya varsa onu kullan, yoksa sunucu kimliğini (GCE) kullan
-    const options: any = {
-        projectId: process.env.GCS_PROJECT_ID
+// Initialize S3 Client (R2)
+const s3Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || ''
     }
+})
 
-    if (fs.existsSync(KEY_PATH)) {
-        options.keyFilename = KEY_PATH
-    }
+const BUCKET_NAME = process.env.R2_BUCKET_NAME || 'shorts-bucket'
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || '' // e.g. https://pub-xxxx.r2.dev
 
-    storage = new Storage(options)
-    console.log('✅ Google Cloud Storage başlatıldı (Mod:', fs.existsSync(KEY_PATH) ? 'Key File' : 'Auto Discovery', ')')
-} catch (error) {
-    console.warn('Google Cloud Storage uyarısı:', error)
-}
-
-export async function uploadToStorage(filePath: string, destination: string): Promise<string> {
-    if (!storage) throw new Error('Storage başlatılamadı. Google Credentials dosyasını kontrol et.')
-
-    const bucket = storage.bucket(BUCKET_NAME)
-
-    // Upload options
-    const [file] = await bucket.upload(filePath, {
-        destination,
-        // public: true, // REMOVED: Incompatible with Uniform Bucket Access. Bucket is already public.
-        metadata: {
-            cacheControl: 'public, max-age=31536000',
-        },
-    })
-
-    return file.publicUrl()
-}
-
-export async function deleteFromStorage(filename: string) {
-    if (!storage) return
-
+export async function uploadFileToR2(filePath: string, key: string, contentType: string = 'video/mp4') {
     try {
-        await storage.bucket(BUCKET_NAME).file(filename).delete()
+        const fileStream = fs.createReadStream(filePath)
+
+        const command = new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key,
+            Body: fileStream,
+            ContentType: contentType
+        })
+
+        await s3Client.send(command)
+
+        // Return the public URL
+        // If PUBLIC_URL is missing, this will return just the slash path, which won't work 
+        // unless frontend handles it. But we expect PUBLIC_URL to be set.
+        return `${PUBLIC_URL}/${key}`
     } catch (error) {
-        console.error('GCS Silme Hatası:', error)
+        console.error('R2 Upload Error:', error)
+        throw error
     }
 }
 
-export function getPublicUrl(filename: string) {
-    return `https://storage.googleapis.com/${BUCKET_NAME}/${filename}`
+export async function deleteFileFromR2(key: string) {
+    try {
+        const command = new DeleteObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: key
+        })
+        await s3Client.send(command)
+        return true
+    } catch (error) {
+        console.error('R2 Delete Error:', error)
+        return false // Don't crash for delete errors
+    }
 }
