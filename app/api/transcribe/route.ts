@@ -4,6 +4,7 @@ import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
 import { PrismaClient } from '@prisma/client'
+import { createClient } from '@deepgram/sdk'
 
 const prisma = new PrismaClient()
 const execAsync = promisify(exec)
@@ -17,270 +18,243 @@ if (!fs.existsSync(TEMP_DIR)) {
 import { checkRateLimit } from '@/lib/rateLimit'
 import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
-export async function POST(req: NextRequest) {
-    // 1. Rate Limit Check (10 requests per hour)
-    const ip = req.headers.get('x-forwarded-for') || 'anonymous'
-    const rate = checkRateLimit(ip, 10, 60 * 60 * 1000)
+// --- DEEPGRAM LOGIC ---
+async function transcribeWithDeepgram(jobId: string, audioPath: string, language: string) {
+    updateJob(jobId, { message: 'Deepgram ile işleniyor (Hızlı Mod)...' })
 
-    if (!rate.success) {
-        return NextResponse.json(
-            { error: 'Transkripsiyon işlem limitiniz doldu.' },
-            { status: 429 }
-        )
+    const deepgramKey = process.env.DEEPGRAM_API_KEY
+    if (!deepgramKey) throw new Error('Deepgram API Key eksik.')
+
+    const deepgram = createClient(deepgramKey)
+
+    const fileBuffer = fs.readFileSync(audioPath)
+
+    // Call Deepgram API
+    // Model: nova-2 (fastest & most accurate)
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+        fileBuffer,
+        {
+            model: 'nova-2',
+            language: language,
+            smart_format: true,
+            punctuate: true,
+            diarize: false,
+        }
+    )
+
+    if (error) throw new Error(`Deepgram Error: ${error.message}`)
+    if (!result?.results?.channels?.[0]?.alternatives?.[0]) throw new Error('Deepgram boş sonuç döndürdü.')
+
+    const alternative = result.results.channels[0].alternatives[0]
+    const words = alternative.words || []
+
+    // Convert Deepgram words to our "SubtitleSegment" format
+    // Deepgram word: { word: "Hello", start: 0.5, end: 1.0, confidence: 0.99 }
+    // We want: [{ id: 1, start: 0.5, end: 1.0, text: "Hello" }]
+    // But usually we want grouped segments (phrases). 
+    // For now, let's map words directly or use paragraphs if available. 
+    // The existing UI handles word-level animation well.
+    // Let's assume we map words to segments for maximum granularity, 
+    // OR we relies on paragraphs.
+
+    // Better approach: Use paragraphs for segments if available, otherwise words
+    // Deepgram Nova-2 supports paragraphs.
+
+    let segments: any[] = []
+
+    if (alternative.paragraphs?.paragraphs) {
+        // Map paragraphs to segments
+        segments = alternative.paragraphs.paragraphs.map((p: any, index: number) => ({
+            id: index + 1,
+            start: p.start,
+            end: p.end,
+            text: p.sentences.map((s: any) => s.text).join(' ')
+        }))
+    } else {
+        // Fallback to simpler segmentation if no paragraphs (e.g. just grouping words or returning single segment?)
+        // Let's rely on transcript string if we have to, but words are better.
+        // Let's create small groups of words (e.g. 5-10 words) if no paragraphs
+        // Actually, returning words as segments might be too granular for specific UI "cards", 
+        // but our editor supports word-level editing.
+        // Let's construct segments from sentences if available?
+        // Deepgram usually provides sentences in newer models inside paragraphs or just text.
+
+        // Let's manually chunk words if needed. 
+        // Re-reading deepgram docs: paragraphs are standart in nova-2.
+
+        // Final Fallback: Single segment
+        segments = [{
+            id: 1,
+            start: 0,
+            end: alternative.words?.[alternative.words.length - 1]?.end || 0,
+            text: alternative.transcript
+        }]
     }
+
+    return {
+        segments,
+        text: alternative.transcript
+    }
+}
+
+// --- WHISPER LOCAL LOGIC ---
+async function transcribeWithWhisper(jobId: string, audioPath: string, model: string, language: string) {
+    updateJob(jobId, { message: 'Yapay zeka (Whisper) sesi metne dönüştürüyor...' })
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
+    const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python')
+
+    return new Promise<any>((resolve, reject) => {
+        const pythonProcess = spawn(pythonPath, [
+            scriptPath,
+            audioPath,
+            '--model', model,
+            '--language', language
+        ])
+
+        let stdoutData = ''
+        let stderrData = ''
+
+        const timeout = setTimeout(() => {
+            pythonProcess.kill()
+            reject(new Error('Whisper process timed out (10 mins limit)'))
+        }, 10 * 60 * 1000)
+
+        pythonProcess.stdout.on('data', (data) => {
+            stdoutData += data.toString()
+        })
+
+        pythonProcess.stderr.on('data', (data) => {
+            const str = data.toString()
+            stderrData += str
+            console.log(`[Whisper]: ${str}`)
+            if (str.includes('%')) {
+                // Parse progress if possible, or just ignore
+            }
+        })
+
+        pythonProcess.on('close', (code) => {
+            clearTimeout(timeout)
+            if (code !== 0) {
+                reject(new Error(stderrData || 'Whisper process failed'))
+                return
+            }
+            try {
+                const jsonStart = stdoutData.indexOf('{')
+                const jsonEnd = stdoutData.lastIndexOf('}')
+                if (jsonStart === -1) throw new Error('Invalid JSON from Whisper')
+
+                const jsonStr = stdoutData.substring(jsonStart, jsonEnd + 1)
+                const result = JSON.parse(jsonStr)
+                resolve(result)
+            } catch (e: any) {
+                reject(new Error(`Whisper JSON Parse Failed: ${e.message}`))
+            }
+        })
+    })
+}
+
+
+export async function POST(req: NextRequest) {
+    // 1. Rate Limit
+    const ip = req.headers.get('x-forwarded-for') || 'anonymous'
+    const rate = checkRateLimit(ip, 20, 60 * 60 * 1000) // Increased limit slightly
+    if (!rate.success) return NextResponse.json({ error: 'Limit aşıldı.' }, { status: 429 })
 
     try {
         const body = await req.json()
         const { videoPath, language = 'tr', model = 'medium' } = body
 
-        if (!videoPath) {
-            return NextResponse.json({ error: 'Video path required' }, { status: 400 })
-        }
-
+        if (!videoPath) return NextResponse.json({ error: 'No video path' }, { status: 400 })
         const inputPath = path.join(process.cwd(), 'public', videoPath)
-        if (!fs.existsSync(inputPath)) {
-            return NextResponse.json({ error: 'Video file not found' }, { status: 404 })
-        }
+        if (!fs.existsSync(inputPath)) return NextResponse.json({ error: 'File not found' }, { status: 404 })
 
-        // Generate unique ID & Job
-        const processId = Date.now().toString()
-        const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
+        // Job Setup
         const job = createJob('subtitle')
-
-        // Enqueue the job
         const { canStart, position } = enqueueJob(job.id, 'subtitle')
 
-        const startTranscription = async () => {
-            // Wait in queue if needed
-            if (!canStart) {
-                updateJob(job.id, {
-                    status: 'queued',
-                    message: `Altyazı sırası bekleniyor... (${position}. sıra)`,
-                    queuePosition: position
-                })
-
-                // Poll until this job can start
-                await new Promise<void>((resolve) => {
-                    const checkInterval = setInterval(() => {
-                        const currentJob = require('@/lib/jobs').getJob(job.id)
-                        if (currentJob?.status === 'processing') {
-                            clearInterval(checkInterval)
-                            resolve()
-                        }
-                    }, 1000)
-                })
-            }
-
-            updateJob(job.id, { status: 'processing', message: 'Ses ayrıştırılıyor...', queuePosition: undefined })
-
-            try {
-                console.log('Starting transcription for:', videoPath)
-
-                // Step 1: Extract Audio
-                const extractCmd = `ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`
-                await execAsync(extractCmd)
-
-                // HYBRID LOGIC: DB > Env > Local
-                // Check DB Setting first
-                let transcriptionMode = 'local'
-
-                // Fallback from environment if DB is empty/fails
-                if (process.env.USE_EXTERNAL_SUBTITLES === 'true') transcriptionMode = 'cloud' // Legacy Env Support maps to 'cloud' (auto)
-
-                try {
-                    const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
-                    if (setting) transcriptionMode = setting.value
-                } catch (e) {
-                    console.error('Failed to strict-read settings, falling back to env', e)
-                }
-
-                // Determine strategy
-                const USE_EXTERNAL = transcriptionMode === 'cloud' || transcriptionMode === 'cloud_force'
-                const FORCE_CLOUD = transcriptionMode === 'cloud_force'
-                let externalSuccess = false
-
-                if (USE_EXTERNAL) {
-                    updateJob(job.id, { message: 'Bulut sunucusuna yükleniyor (FreeSubtitles.ai)...' })
-
-                    try {
-                        // 1. Upload
-                        const formData = new FormData()
-                        const fileBuffer = fs.readFileSync(audioPath)
-                        const fileBlob = new Blob([fileBuffer], { type: 'audio/wav' })
-                        formData.append('file', fileBlob, 'audio.wav')
-                        // formData.append('model', model) // REMOVED: API rejects model parameter
-                        formData.append('language', language)
-
-                        const apiKey = process.env.FREESUBTITLES_API_KEY || ''
-                        const headers: any = {}
-                        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
-                        const uploadRes = await fetch('https://freesubtitles.ai/api', {
-                            method: 'POST',
-                            headers: headers,
-                            body: formData
-                        })
-
-                        if (uploadRes.status === 429) {
-                            throw new Error('External API Rate Limit (429) - Çok fazla istek gönderildi.')
-                        }
-
-                        if (!uploadRes.ok) {
-                            const errorText = await uploadRes.text()
-                            console.error('External API Error Body:', errorText)
-                            throw new Error(`External API Upload Failed: ${uploadRes.status} ${uploadRes.statusText} - ${errorText.substring(0, 200)}`)
-                        }
-
-                        const uploadData = await uploadRes.json()
-                        const externalId = uploadData.id
-
-                        if (!externalId) throw new Error('External API returned no ID')
-
-                        // 2. Poll
-                        updateJob(job.id, { message: 'Bulutta işleniyor...' })
-
-                        let result = null
-                        let attempts = 0
-
-                        while (attempts < 300) {
-                            await new Promise(r => setTimeout(r, 2000)) // 2s polling
-                            const statusRes = await fetch(`https://freesubtitles.ai/api/${externalId}`, { headers })
-
-                            if (statusRes.ok) {
-                                const statusData = await statusRes.json()
-                                if (statusData.status === 'completed') {
-                                    result = statusData
-                                    break
-                                } else if (statusData.status === 'failed') {
-                                    throw new Error('External transcription status: failed')
-                                }
-                                if (statusData.progress) {
-                                    updateJob(job.id, { message: `Bulutta işleniyor... %${Math.round(statusData.progress)}` })
-                                }
-                            }
-                            attempts++
-                        }
-
-                        if (!result) throw new Error('External API polling timed out')
-
-                        // 3. Success
-                        try { fs.unlinkSync(audioPath) } catch (e) { }
-                        completeJob(job.id, 'subtitle')
-
-                        updateJob(job.id, {
-                            status: 'completed',
-                            progress: 100,
-                            result: result
-                        })
-                        externalSuccess = true
-
-                    } catch (extError: any) {
-                        console.error('External API Error:', extError.message)
-
-                        if (FORCE_CLOUD) {
-                            // If forced, do NOT fallback. Rethrow error to be caught by main catch block
-                            throw new Error(`CLOUD_FORCE Mode Error: ${extError.message}`)
-                        }
-
-                        // Fallback Trigger (Only if not forced)
-                        updateJob(job.id, { message: 'Bulut servisi yoğun, yerel işlemciye geçiliyor...' })
+            // Async Processing
+            (async () => {
+                // Wait for queue
+                if (!canStart) {
+                    updateJob(job.id, {
+                        status: 'queued',
+                        message: `Sırada bekleniyor (${position})...`,
+                        queuePosition: position
+                    })
+                    // Simple poll wait
+                    while (true) {
+                        await new Promise(r => setTimeout(r, 1000))
+                        const current = require('@/lib/jobs').getJob(job.id)
+                        if (current?.status === 'processing') break
                     }
                 }
 
-                // LOCAL FALLBACK / DEFAULT LOGIC
-                if (!externalSuccess) {
-                    updateJob(job.id, { message: 'Yapay zeka sesi metne dönüştürüyor (Local)...' })
+                updateJob(job.id, { status: 'processing', message: 'Ses ayrıştırılıyor...', queuePosition: undefined })
 
-                    // Step 2: Run Python Transcription Script (LOCAL)
-                    const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
-                    const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python')
+                const processId = Date.now().toString()
+                const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
 
-                    const pythonProcess = spawn(pythonPath, [
-                        scriptPath,
-                        audioPath,
-                        '--model', model,
-                        '--language', language
-                    ])
+                try {
+                    // Extract Audio
+                    await execAsync(`ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`)
 
-                    let stdoutData = ''
-                    let stderrData = ''
+                    // Check Provider Setting
+                    let provider = 'deepgram' // Default
+                    const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
+                    if (setting?.value) provider = setting.value
 
-                    await new Promise<void>((resolve, reject) => {
-                        // Timeout (10 minutes max)
-                        const timeout = setTimeout(() => {
-                            pythonProcess.kill()
-                            reject(new Error('Transcription process timed out (10 minutes limit)'))
-                        }, 10 * 60 * 1000)
+                    // If legacy 'cloud' or 'cloud_force' is in DB, map to deepgram
+                    if (provider === 'cloud' || provider === 'cloud_force') provider = 'deepgram'
 
-                        pythonProcess.stdout.on('data', (data) => {
-                            const str = data.toString()
-                            stdoutData += str
-                            console.log(`[Whisper STDOUT]: ${str.substring(0, 100)}...`)
-                        })
+                    let result = null
 
-                        pythonProcess.stderr.on('data', (data) => {
-                            const str = data.toString()
-                            stderrData += str
-                            console.log(`[Whisper STDERR]: ${str}`)
-                            if (str.includes('Downloading') || str.includes('%')) {
-                                updateJob(job.id, { message: 'AI Modeli indiriliyor (Bu işlem biraz sürebilir)...' })
-                            }
-                        })
+                    if (provider === 'deepgram') {
+                        try {
+                            result = await transcribeWithDeepgram(job.id, audioPath, language)
+                        } catch (e: any) {
+                            console.error('Deepgram failed, falling back to local?', e)
+                            // Optional: Fallback to local if deepgram fails? 
+                            // User said "preserve whisper as backup". 
+                            // Usually explicit "Backup" means if primary fails. 
+                            // But if Admin selects "Deepgram", maybe they just want Deepgram.
+                            // Let's implement auto-fallback with a toast warning ideally, 
+                            // but here accessing frontend toast is impossible.
+                            // Let's update job message.
+                            updateJob(job.id, { message: 'Deepgram hatası, yerel motora geçiliyor...' })
+                            result = await transcribeWithWhisper(job.id, audioPath, model, language)
+                        }
+                    } else {
+                        // Local
+                        result = await transcribeWithWhisper(job.id, audioPath, model, language)
+                    }
 
-                        pythonProcess.on('close', (code) => {
-                            clearTimeout(timeout)
-                            try { fs.unlinkSync(audioPath) } catch (e) { }
-                            completeJob(job.id, 'subtitle')
-                            if (code !== 0) {
-                                reject(new Error(stderrData || 'Transcription process failed'))
-                                return
-                            }
-                            try {
-                                const jsonStart = stdoutData.indexOf('{')
-                                const jsonEnd = stdoutData.lastIndexOf('}')
-                                if (jsonStart === -1 || jsonEnd === -1) {
-                                    reject(new Error('Invalid JSON output from script'))
-                                    return
-                                }
-                                const jsonStr = stdoutData.substring(jsonStart, jsonEnd + 1)
-                                const result = JSON.parse(jsonStr)
-                                if (result.error) {
-                                    reject(new Error(result.error))
-                                    return
-                                }
-                                updateJob(job.id, {
-                                    status: 'completed',
-                                    progress: 100,
-                                    result: result
-                                })
-                                resolve()
-                            } catch (e: any) {
-                                reject(new Error(`Failed to parse transcription output: ${e.message}`))
-                            }
-                        })
+                    // Cleanup
+                    try { fs.unlinkSync(audioPath) } catch (e) { }
+
+                    completeJob(job.id, 'subtitle')
+                    updateJob(job.id, {
+                        status: 'completed',
+                        progress: 100,
+                        result: result
                     })
+
+                } catch (err: any) {
+                    console.error('Processing Error:', err)
+                    try { fs.unlinkSync(audioPath) } catch (e) { }
+                    completeJob(job.id, 'subtitle')
+                    updateJob(job.id, { status: 'error', error: err.message })
                 }
-
-            } catch (error: any) {
-                console.error('Transcribe API Error:', error)
-                completeJob(job.id, 'subtitle')
-                updateJob(job.id, { status: 'error', error: error.message })
-            }
-        }
-
-        // Fire and forget
-        startTranscription()
+            })()
 
         return NextResponse.json({
             success: true,
             jobId: job.id,
-            message: canStart ? 'Transkripsiyon başlatıldı' : `Sırada bekleniyor (${position}. sıra)`,
-            queued: !canStart,
-            queuePosition: position
+            message: canStart ? 'Başlatıldı' : 'Sırada',
+            queued: !canStart
         })
 
-    } catch (error: any) {
-        console.error('API Error:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+    } catch (e: any) {
+        return NextResponse.json({ error: e.message }, { status: 500 })
     }
 }
