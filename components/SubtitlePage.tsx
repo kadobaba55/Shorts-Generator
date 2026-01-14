@@ -6,6 +6,7 @@ import { formatTime } from '@/lib/estimateTime'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
+import { SUBTITLE_PRESETS, ALL_FONTS, SubtitlePreset } from '@/lib/subtitlePresets'
 
 export interface SubtitleSegment {
     id: string
@@ -21,6 +22,17 @@ export interface SubtitleStyle {
     primaryColor: string
     outlineColor: string
     fontSize: number
+    // Extended properties
+    bgEnabled?: boolean
+    bgColor?: string
+    bgOpacity?: number
+    bgBlur?: boolean
+    bgRadius?: number
+    shadowEnabled?: boolean
+    shadowColor?: string
+    shadowBlur?: number
+    animation?: string
+    animationSpeed?: number
 }
 
 interface SubtitlePageProps {
@@ -31,19 +43,8 @@ interface SubtitlePageProps {
     isLoading?: boolean
 }
 
-// Predefined styles
-const STYLES: SubtitleStyle[] = [
-    { id: 'viral', name: '🔥 Viral', font: 'Impact', primaryColor: '#00FFFF', outlineColor: '#000000', fontSize: 32 },
-    { id: 'neon', name: '✨ Neon', font: 'Arial Black', primaryColor: '#FF00FF', outlineColor: '#000000', fontSize: 30 },
-    { id: 'minimal', name: '🎯 Minimal', font: 'Roboto', primaryColor: '#FFFFFF', outlineColor: '#404040', fontSize: 24 },
-    { id: 'karaoke', name: '🎤 Karaoke', font: 'Comic Sans MS', primaryColor: '#FFD700', outlineColor: '#000000', fontSize: 28 },
-]
-
-// Available fonts
-const FONTS = ['Impact', 'Arial Black', 'Roboto', 'Comic Sans MS', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana']
-
 // Color presets
-const COLOR_PRESETS = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FF0000', '#FFFFFF', '#FFD700', '#FF6B6B']
+const COLOR_PRESETS = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FF0000', '#FFFFFF', '#FFD700', '#FF6B6B', '#4ECDC4', '#9B59B6']
 
 // Position options
 const POSITIONS = [
@@ -58,7 +59,17 @@ const ANIMATIONS = [
     { id: 'pop', name: 'Pop', icon: '💫' },
     { id: 'fade', name: 'Fade', icon: '🌫️' },
     { id: 'slide', name: 'Slide', icon: '➡️' },
+    { id: 'bounce', name: 'Bounce', icon: '🔄' },
+    { id: 'typewriter', name: 'Typewriter', icon: '⌨️' },
 ]
+
+const hexToRgba = (hex: string, alpha: number) => {
+    if (!hex) return 'transparent'
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 export default function SubtitlePage({ videoPath, initialSegments = [], onSave, onBack }: SubtitlePageProps) {
     // Core state
@@ -74,16 +85,123 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     const videoRef = useRef<HTMLVideoElement>(null)
 
     // Styling state
-    const [selectedStyle, setSelectedStyle] = useState<SubtitleStyle>(STYLES[0])
+    const [selectedPreset, setSelectedPreset] = useState<SubtitlePreset>(SUBTITLE_PRESETS[0])
     const [customFont, setCustomFont] = useState('Impact')
     const [customColor, setCustomColor] = useState('#00FFFF')
     const [position, setPosition] = useState('bottom')
-    const [animation, setAnimation] = useState('none')
-    const [showStylePanel, setShowStylePanel] = useState(true) // Default open on separate page
+    const [animation, setAnimation] = useState('pop')
+    const [animationSpeed, setAnimationSpeed] = useState(1.0)
+    const [showStylePanel, setShowStylePanel] = useState(true)
+    // Background box state
+    const [bgEnabled, setBgEnabled] = useState(false)
+    const [bgColor, setBgColor] = useState('#000000')
+    const [bgOpacity, setBgOpacity] = useState(0.5)
+    const [bgBlur, setBgBlur] = useState(false)
+    const [bgRadius, setBgRadius] = useState(8)
+    // Keyboard shortcuts modal
+    const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
+
+    // Waveform state
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const [waveformPeaks, setWaveformPeaks] = useState<number[]>([])
 
     // Undo/Redo state
     const [history, setHistory] = useState<SubtitleSegment[][]>([])
     const [historyIndex, setHistoryIndex] = useState(-1)
+
+    // Load waveform data
+    useEffect(() => {
+        if (!videoPath) return
+
+        const fetchAudio = async () => {
+            try {
+                const response = await fetch(videoPath)
+                const arrayBuffer = await response.arrayBuffer()
+                const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+                const rawData = audioBuffer.getChannelData(0)
+                const samples = 100 // bars to show
+                const blockSize = Math.floor(rawData.length / samples)
+                const peaks = []
+                for (let i = 0; i < samples; i++) {
+                    const start = blockSize * i
+                    let sum = 0
+                    for (let j = 0; j < blockSize; j++) {
+                        sum += Math.abs(rawData[start + j])
+                    }
+                    peaks.push(sum / blockSize)
+                }
+                // Normalize
+                const max = Math.max(...peaks)
+                setWaveformPeaks(peaks.map(p => p / max))
+            } catch (e) {
+                console.error('Waveform load error:', e)
+            }
+        }
+        fetchAudio()
+    }, [videoPath])
+
+    // Draw Waveform
+    useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas || waveformPeaks.length === 0) return
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const dpr = window.devicePixelRatio || 1
+        canvas.width = canvas.offsetWidth * dpr
+        canvas.height = canvas.offsetHeight * dpr
+        ctx.scale(dpr, dpr)
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.fillStyle = '#00ff41' // neon green use variable
+
+        const width = canvas.offsetWidth
+        const height = canvas.offsetHeight
+        const barWidth = width / waveformPeaks.length
+
+        waveformPeaks.forEach((peak, i) => {
+            const barHeight = peak * height * 0.8
+            const x = i * barWidth
+            const y = (height - barHeight) / 2
+
+            ctx.globalAlpha = 0.3
+            ctx.fillRect(x, y, barWidth - 1, barHeight)
+        })
+    }, [waveformPeaks])
+
+    // Undo/Redo Logic
+    const addToHistory = () => {
+        const newHistory = history.slice(0, historyIndex + 1)
+        newHistory.push(JSON.parse(JSON.stringify(segments)))
+        if (newHistory.length > 10) newHistory.shift() // Keep last 10
+        setHistory(newHistory)
+        setHistoryIndex(newHistory.length - 1)
+    }
+
+    const handleUndo = () => {
+        if (historyIndex > 0) {
+            setHistoryIndex(historyIndex - 1)
+            setSegments(JSON.parse(JSON.stringify(history[historyIndex - 1])))
+        }
+    }
+
+    const handleRedo = () => {
+        if (historyIndex < history.length - 1) {
+            setHistoryIndex(historyIndex + 1)
+            setSegments(JSON.parse(JSON.stringify(history[historyIndex + 1])))
+        }
+    }
+
+    // Capture initial state
+    useEffect(() => {
+        if (initialSegments.length > 0 && history.length === 0) {
+            setHistory([JSON.parse(JSON.stringify(initialSegments))])
+            setHistoryIndex(0)
+        }
+    }, [initialSegments])
 
     // Drag state
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -129,6 +247,13 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Help Modal Toggle
+            if (e.key === '?' && e.shiftKey) {
+                e.preventDefault()
+                setShowKeyboardHelp(prev => !prev)
+                return
+            }
+
             // Space to play/pause (prevent if typing in textarea)
             if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
                 e.preventDefault()
@@ -327,7 +452,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
         setIsSaving(true)
         try {
             const styleToSave: SubtitleStyle = {
-                ...selectedStyle,
+                ...selectedPreset,
                 font: customFont,
                 primaryColor: customColor,
             }
@@ -341,10 +466,22 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     }
 
     // Apply style preset
-    const applyStylePreset = (style: SubtitleStyle) => {
-        setSelectedStyle(style)
-        setCustomFont(style.font)
-        setCustomColor(style.primaryColor)
+    const applyStylePreset = (preset: SubtitlePreset) => {
+        setSelectedPreset(preset)
+        setCustomFont(preset.font)
+        setCustomColor(preset.primaryColor)
+        setPosition('bottom') // Default position
+        setAnimation(preset.animation || 'pop')
+        setAnimationSpeed(preset.animationSpeed || 1.0)
+
+        // Background settings
+        setBgEnabled(preset.bgEnabled || false)
+        setBgColor(preset.bgColor || '#000000')
+        setBgOpacity(preset.bgOpacity ?? 0.5)
+        setBgBlur(preset.bgBlur || false)
+        setBgRadius(preset.bgRadius ?? 8)
+
+        addToHistory()
     }
 
     // Highlight word (wrap in special markers)
@@ -382,23 +519,22 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
 
                 <div className="flex items-center gap-3">
                     {currentStep === 'edit' && (
-                        <>
-                            <div className="hidden md:flex items-center gap-2 text-xs text-gray-500 font-mono mr-4">
-                                <span className="px-2 py-0.5 bg-gray-800 rounded">SPACE: Play/Pause</span>
-                                <span className="px-2 py-0.5 bg-gray-800 rounded">Ctrl+S: Save</span>
+                        <div className="flex items-center gap-4">
+                            <div className="flex bg-gray-900 rounded border border-gray-800 p-1">
+                                <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 disabled:opacity-30" title="Undo (Ctrl+Z)">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                </button>
+                                <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 disabled:opacity-30" title="Redo (Ctrl+Shift+Z)">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
+                                </button>
+                                <button onClick={() => setShowKeyboardHelp(true)} className="p-1.5 hover:bg-gray-800 rounded text-gray-400" title="Shortcuts (?)">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </button>
                             </div>
 
-                            {historyIndex > 0 && (
-                                <button onClick={undo} className="text-gray-400 hover:text-white text-sm font-mono px-2" title="Undo">
-                                    ↩️
-                                </button>
-                            )}
-                            {historyIndex < history.length - 1 && (
-                                <button onClick={redo} className="text-gray-400 hover:text-white text-sm font-mono px-2" title="Redo">
-                                    ↪️
-                                </button>
-                            )}
-
+                            <div className="text-xs text-gray-500 font-mono hidden md:block">
+                                SPACE: Play/Pause  Ctrl+S: Save
+                            </div>
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
@@ -406,7 +542,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                             >
                                 {isSaving ? 'SAVING...' : '💾 SAVE & APPLY'}
                             </button>
-                        </>
+                        </div>
                     )}
                 </div>
             </div>
@@ -453,10 +589,15 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                                         className="inline-block px-3 py-1 rounded leading-normal"
                                         style={{
                                             fontFamily: customFont,
-                                            fontSize: `${selectedStyle.fontSize}px`,
+                                            fontSize: `${selectedPreset.fontSize}px`,
                                             color: customColor,
-                                            textShadow: `2px 2px 4px ${selectedStyle.outlineColor}, -2px -2px 4px ${selectedStyle.outlineColor}`,
+                                            textShadow: `2px 2px 4px ${selectedPreset.outlineColor}, -2px -2px 4px ${selectedPreset.outlineColor}`,
                                             fontWeight: 'bold',
+                                            backgroundColor: bgEnabled ? hexToRgba(bgColor, bgOpacity) : 'transparent',
+                                            borderRadius: bgEnabled ? `${bgRadius}px` : '0',
+                                            padding: bgEnabled ? '0.2em 0.6em' : '0',
+                                            backdropFilter: bgEnabled && bgBlur ? 'blur(4px)' : 'none',
+                                            boxShadow: bgEnabled ? '0 4px 6px rgba(0,0,0,0.1)' : 'none',
                                         }}
                                     >
                                         {activeSegment.text.replace(/\*\*/g, '')}
@@ -496,7 +637,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                 )}
 
                 {/* Right: Editor Panels */}
-                <div className={`flex flex-col bg-[#0f0f0f] flex-1 ${currentStep === 'transcribe' ? 'w-full' : 'w-full lg:w-1/2'}`}>
+                <div className={`flex flex-col bg-[#0f0f0f] flex-1 ${currentStep === 'transcribe' ? 'w-full' : 'w-full lg:w-1/2'} border-l border-gray-800`}>
                     {currentStep === 'transcribe' ? (
                         <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-6 lg:p-10">
                             <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
@@ -646,11 +787,11 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                                     <div className="space-y-3">
                                         <div className="text-xs font-mono text-gray-500 tracking-widest">QUICK PRESETS</div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {STYLES.map(style => (
+                                            {SUBTITLE_PRESETS.map(style => (
                                                 <button
                                                     key={style.id}
                                                     onClick={() => applyStylePreset(style)}
-                                                    className={`p-3 rounded text-left transition-all border ${selectedStyle.id === style.id
+                                                    className={`p-3 rounded text-left transition-all border ${selectedPreset.id === style.id
                                                         ? 'bg-neon-green/10 border-neon-green text-neon-green'
                                                         : 'bg-gray-900 border-gray-800 hover:border-gray-600 text-gray-300'
                                                         }`}
@@ -673,7 +814,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                                                 onChange={(e) => setCustomFont(e.target.value)}
                                                 className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-neon-purple outline-none"
                                             >
-                                                {FONTS.map(font => (
+                                                {ALL_FONTS.map(font => (
                                                     <option key={font} value={font}>{font}</option>
                                                 ))}
                                             </select>
@@ -698,6 +839,61 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                                                     className="w-8 h-8 rounded-full cursor-pointer overflow-hidden border-none p-0"
                                                 />
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-px bg-gray-800 my-4"></div>
+
+                                    {/* BACKGROUND & ANIMATION */}
+                                    <div className="space-y-4">
+                                        <div className="text-xs font-mono text-gray-500 tracking-widest">EFFECTS</div>
+
+                                        {/* Background Toggle */}
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs text-gray-400">Background Box</label>
+                                            <button
+                                                onClick={() => setBgEnabled(!bgEnabled)}
+                                                className={`w-10 h-5 rounded-full transition-colors relative ${bgEnabled ? 'bg-neon-green' : 'bg-gray-700'}`}
+                                            >
+                                                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${bgEnabled ? 'left-6' : 'left-1'}`} />
+                                            </button>
+                                        </div>
+
+                                        {bgEnabled && (
+                                            <div className="space-y-3 p-3 bg-gray-900 rounded border border-gray-800 animate-fade-in">
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-gray-500">Opacity</span>
+                                                    <span className="text-neon-cyan">{Math.round(bgOpacity * 100)}%</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="0" max="1" step="0.1"
+                                                    value={bgOpacity} onChange={(e) => setBgOpacity(parseFloat(e.target.value))}
+                                                    className="w-full range-retro h-1"
+                                                />
+
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-gray-500">Radius</span>
+                                                    <span className="text-neon-cyan">{bgRadius}px</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="0" max="30" step="2"
+                                                    value={bgRadius} onChange={(e) => setBgRadius(parseInt(e.target.value))}
+                                                    className="w-full range-retro h-1"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Animation Speed */}
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-gray-400">Animation Speed</span>
+                                                <span className="text-neon-amber">{animationSpeed}x</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0.5" max="2.0" step="0.1"
+                                                value={animationSpeed} onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
+                                                className="w-full range-retro"
+                                            />
                                         </div>
                                     </div>
 
@@ -756,6 +952,127 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                     )}
                 </div>
             </div>
+
+            {/* TIMELINE (Only in Edit Mode) */}
+            {currentStep === 'edit' && videoRef.current && (
+                <div className="h-48 bg-[#0a0a0a] border-t border-gray-800 flex flex-col relative group select-none">
+                    {/* Time Indicators */}
+                    <div className="h-6 flex items-center px-4 border-b border-gray-800 text-[10px] fon-mono text-gray-500">
+                        {formatTime(0)}
+                        <span className="mx-auto">TIMELINE EDITOR</span>
+                        {formatTime(videoRef.current.duration || 0)}
+                    </div>
+
+                    {/* Waveform & Segments Container */}
+                    <div className="flex-1 relative overflow-hidden bg-[#050505]">
+                        {/* Waveform Canvas */}
+                        <canvas
+                            ref={canvasRef}
+                            className="absolute inset-0 w-full h-full opacity-30 pointer-events-none"
+                            width={1000}
+                            height={150}
+                        />
+
+                        {/* Playhead */}
+                        {videoRef.current.duration > 0 && (
+                            <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-neon-red z-20 pointer-events-none shadow-[0_0_10px_red]"
+                                style={{ left: `${(videoTime / videoRef.current.duration) * 100}%` }}
+                            >
+                                <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-neon-red transform rotate-45" />
+                            </div>
+                        )}
+
+                        {/* Segments Layer */}
+                        <div className="absolute inset-0 flex items-center px-2">
+                            {segments.map((seg, idx) => {
+                                if (!videoRef.current?.duration) return null
+                                const duration = videoRef.current.duration
+                                const left = (seg.start / duration) * 100
+                                const width = ((seg.end - seg.start) / duration) * 100
+                                const isActive = videoTime >= seg.start && videoTime <= seg.end
+
+                                return (
+                                    <div
+                                        key={seg.id}
+                                        className={`absolute h-20 rounded cursor-pointer border overflow-hidden transition-all group/seg
+                                            ${isActive ? 'border-neon-green z-10 bg-neon-green/20' : 'border-gray-600 bg-gray-800/50 hover:border-gray-400'}
+                                        `}
+                                        style={{ left: `${left}%`, width: `${width}%`, top: '10%' }}
+                                        onClick={() => {
+                                            if (videoRef.current) {
+                                                videoRef.current.currentTime = seg.start
+                                                setVideoTime(seg.start)
+                                            }
+                                        }}
+                                    >
+                                        <div className="px-1 py-0.5 text-[8px] truncate text-white/70 font-mono select-none">
+                                            {seg.text}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Keyboard Help Modal */}
+            <AnimatePresence>
+                {showKeyboardHelp && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowKeyboardHelp(false)}
+                        className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            onClick={e => e.stopPropagation()}
+                            className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent">Keyboard Shortcuts</h3>
+                                <button onClick={() => setShowKeyboardHelp(false)} className="text-gray-500 hover:text-white">✕</button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-gray-400">Play / Pause</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">SPACE</code>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-gray-400">Undo</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + Z</code>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-gray-400">Redo</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + Shift + Z</code>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-gray-400">Save</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">Ctrl + S</code>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-gray-400">Split Segment</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">S</code>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-400">Merge with Next</span>
+                                    <code className="bg-gray-800 px-2 py-1 rounded text-xs text-neon-green">M</code>
+                                </div>
+                            </div>
+
+                            <div className="mt-6 text-center text-xs text-gray-500">
+                                Press <span className="text-white">?</span> to toggle this menu
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </main>
     )
 }
