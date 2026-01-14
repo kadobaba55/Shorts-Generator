@@ -14,8 +14,8 @@ const s3Client = new S3Client({
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || 'shorts-bucket'
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || '' // e.g. https://pub-xxxx.r2.dev
 
-const QUOTA_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
-const QUOTA_TARGET_BYTES = 9 * 1024 * 1024 * 1024 // 9 GB target after cleanup
+const QUOTA_LIMIT_BYTES = 100 * 1024 * 1024 * 1024 // 100 GB
+const QUOTA_TARGET_BYTES = 90 * 1024 * 1024 * 1024 // 90 GB target after cleanup
 const CHECK_COOLDOWN_MS = 5 * 60 * 1000 // Check at most every 5 minutes
 
 let lastCheckTime = 0
