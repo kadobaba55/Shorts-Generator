@@ -23,6 +23,7 @@ interface ProcessedClip {
     trimStart?: number
     trimEnd?: number
     subtitleSegments?: any[]
+    subtitleStyle?: any
     // New editable properties
     fadeIn?: number
     fadeOut?: number
@@ -63,11 +64,18 @@ export default function EditorPage() {
                     let videoPath = clipDataRaw
                     let paddingStart = 0
 
+                    let hasSubtitles = false
+                    let subtitleSegments: any[] = []
+                    let subtitleStyle: any = undefined
+
                     try {
                         const parsed = JSON.parse(clipDataRaw)
                         if (parsed.url) {
                             videoPath = parsed.url
                             paddingStart = parsed.paddingStart || 0
+                            hasSubtitles = parsed.hasSubtitles || false
+                            subtitleSegments = parsed.subtitleSegments || []
+                            subtitleStyle = parsed.subtitleStyle
                         }
                     } catch (e) {
                         // Not JSON, assume string URL
@@ -83,11 +91,13 @@ export default function EditorPage() {
                         start: originalStart,
                         end: originalEnd,
                         duration: duration,
-                        hasSubtitles: false,
+                        hasSubtitles: hasSubtitles,
                         isProcessing: false,
                         paddingStart: paddingStart,
                         trimStart: paddingStart,
-                        trimEnd: paddingStart + duration
+                        trimEnd: paddingStart + duration,
+                        subtitleSegments: subtitleSegments,
+                        subtitleStyle: subtitleStyle
                     }
                 })
                 setProcessedClips(clips)

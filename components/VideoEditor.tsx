@@ -16,6 +16,9 @@ interface ProcessedClip {
     paddingStart?: number
     trimStart?: number
     trimEnd?: number
+    subtitleSegments?: any[]
+    subtitleStyle?: any
+    // New editable properties
     fadeIn?: number
     fadeOut?: number
     volume?: number
@@ -518,6 +521,52 @@ export default function VideoEditor({
                                 <div className="absolute top-2 left-2 font-mono text-xs text-neon-green bg-black/70 px-2 py-1">
                                     CLIP_{String(selectedClipIndex + 1).padStart(2, '0')}
                                 </div>
+
+                                {/* Live Subtitle Preview Overlay */}
+                                {selectedClip && selectedClip.hasSubtitles && selectedClip.subtitleSegments && (
+                                    (() => {
+                                        // Find active segment
+                                        const activeSegment = selectedClip.subtitleSegments.find((seg: any) =>
+                                            currentTime >= seg.start && currentTime <= seg.end
+                                        )
+
+                                        if (!activeSegment) return null
+
+                                        const style = selectedClip.subtitleStyle || {}
+                                        const position = 'bottom'
+
+                                        const hexToRgba = (hex: string, alpha: number) => {
+                                            const r = parseInt(hex.slice(1, 3), 16)
+                                            const g = parseInt(hex.slice(3, 5), 16)
+                                            const b = parseInt(hex.slice(5, 7), 16)
+                                            return `rgba(${r}, ${g}, ${b}, ${alpha})`
+                                        }
+
+                                        return (
+                                            <div
+                                                className="absolute left-0 right-0 px-4 text-center pointer-events-none bottom-16"
+                                            >
+                                                <span
+                                                    className="inline-block px-3 py-1 rounded leading-normal"
+                                                    style={{
+                                                        fontFamily: style.font || 'Inter',
+                                                        fontSize: `${style.fontSize || 24}px`,
+                                                        color: style.primaryColor || '#ffffff',
+                                                        textShadow: style.outlineColor ? `2px 2px 4px ${style.outlineColor}, -2px -2px 4px ${style.outlineColor}` : '2px 2px 4px #000',
+                                                        fontWeight: 'bold',
+                                                        backgroundColor: style.bgEnabled ? hexToRgba(style.bgColor || '#000000', style.bgOpacity ?? 0.5) : 'transparent',
+                                                        borderRadius: style.bgEnabled ? `${style.bgRadius ?? 8}px` : '0',
+                                                        padding: style.bgEnabled ? '0.2em 0.6em' : '0',
+                                                        backdropFilter: style.bgEnabled && style.bgBlur ? 'blur(4px)' : 'none',
+                                                        boxShadow: style.bgEnabled ? '0 4px 6px rgba(0,0,0,0.1)' : 'none',
+                                                    }}
+                                                >
+                                                    {activeSegment.text.replace(/\*\*/g, '')}
+                                                </span>
+                                            </div>
+                                        )
+                                    })()
+                                )}
                             </div>
 
                             {/* Video Controls */}
