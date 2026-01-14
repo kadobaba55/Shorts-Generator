@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 
 export default function AdminSettings() {
-    const [transcriptionMode, setTranscriptionMode] = useState<'local' | 'cloud'>('local')
+    const [transcriptionMode, setTranscriptionMode] = useState<'local' | 'cloud' | 'cloud_force'>('local')
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -19,9 +19,8 @@ export default function AdminSettings() {
             if (res.ok) {
                 const data = await res.json()
                 if (data.transcription_mode) {
-                    setTranscriptionMode(data.transcription_mode as 'local' | 'cloud')
+                    setTranscriptionMode(data.transcription_mode as 'local' | 'cloud' | 'cloud_force')
                 } else {
-                    // Default if not set
                     setTranscriptionMode('local')
                 }
             }
@@ -33,10 +32,10 @@ export default function AdminSettings() {
         }
     }
 
-    const handleToggle = async () => {
-        const newMode = transcriptionMode === 'local' ? 'cloud' : 'local'
-        setIsSaving(true)
+    const handleModeChange = async (newMode: 'local' | 'cloud' | 'cloud_force') => {
+        if (newMode === transcriptionMode) return
 
+        setIsSaving(true)
         // Optimistic update
         setTranscriptionMode(newMode)
 
@@ -49,11 +48,15 @@ export default function AdminSettings() {
 
             if (!res.ok) throw new Error('Failed to save')
 
-            toast.success(`Mod değiştirildi: ${newMode === 'cloud' ? 'Bulut (FreeSubtitles)' : 'Yerel (Local CPU)'}`)
+            let modeName = 'Yerel'
+            if (newMode === 'cloud') modeName = 'Otomatik (Hibrit)'
+            if (newMode === 'cloud_force') modeName = 'Bulut (Zorla)'
+
+            toast.success(`Mod değiştirildi: ${modeName}`)
         } catch (error) {
             console.error('Failed to save setting:', error)
             toast.error('Ayar kaydedilemedi')
-            // Revert optimistic update
+            // Revert
             setTranscriptionMode(transcriptionMode)
         } finally {
             setIsSaving(false)
@@ -78,40 +81,64 @@ export default function AdminSettings() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {/* Transcription Mode Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-kado-bg/50 rounded-xl border border-kado-border/50 hover:border-kado-primary/30 transition-colors">
+                    {/* Transcription Mode Selector */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-kado-bg/50 rounded-xl border border-kado-border/50 hover:border-kado-primary/30 transition-colors gap-4">
                         <div className="space-y-1">
                             <h3 className="text-kado-text font-medium text-lg">Transkripsiyon Motoru</h3>
-                            <p className="text-sm text-kado-text-secondary">
-                                {transcriptionMode === 'cloud'
-                                    ? 'Bulut Tabanlı (FreeSubtitles.ai) - Sunucuyu yormaz.'
-                                    : 'Yerel İşlemci (Local Whisper) - Kendi sunucunu kullanır.'}
+                            <p className="text-sm text-kado-text-secondary max-w-md">
+                                Videoların altyazıya nasıl dönüştürüleceğini seçin.
                             </p>
                         </div>
 
-                        <button
-                            onClick={handleToggle}
-                            disabled={isSaving}
-                            className={`
-                                relative w-16 h-8 rounded-full transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-kado-primary/50
-                                ${transcriptionMode === 'cloud' ? 'bg-kado-success' : 'bg-gray-600'}
-                            `}
-                        >
-                            <span className="sr-only">Toggle Transcription Mode</span>
-                            <span
-                                className={`
-                                    absolute left-1 top-1 w-6 h-6 bg-white rounded-full transition-transform duration-300 shadow-md flex items-center justify-center text-xs font-bold
-                                    ${transcriptionMode === 'cloud' ? 'translate-x-8 text-kado-success' : 'translate-x-0 text-gray-600'}
-                                `}
+                        <div className="flex items-center bg-[#0F172A] p-1 rounded-lg border border-gray-700">
+                            <button
+                                onClick={() => handleModeChange('local')}
+                                disabled={isSaving}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${transcriptionMode === 'local'
+                                        ? 'bg-gray-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                    }`}
                             >
-                                {transcriptionMode === 'cloud' ? '☁️' : '💻'}
-                            </span>
-                        </button>
+                                💻 Yerel
+                            </button>
+                            <button
+                                onClick={() => handleModeChange('cloud')}
+                                disabled={isSaving}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${transcriptionMode === 'cloud'
+                                        ? 'bg-kado-primary text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                🔄 Otomatik
+                            </button>
+                            <button
+                                onClick={() => handleModeChange('cloud_force')}
+                                disabled={isSaving}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${transcriptionMode === 'cloud_force'
+                                        ? 'bg-red-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                    }`}
+                            >
+                                ☁️ Bulut (Zorla)
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Info Box */}
-                    <div className="text-xs text-kado-text-muted p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                        ℹ️ <b>Not:</b> "Bulut" modu seçildiğinde sistem önce FreeSubtitles.ai servisini dener. Hata alırsa otomatik olarak "Yerel" moda düşer (Fallback).
+                    {/* Info Box based on selection */}
+                    <div className={`text-xs p-3 rounded-lg border transition-colors duration-300
+                        ${transcriptionMode === 'local' ? 'bg-gray-500/10 border-gray-500/20 text-gray-300' : ''}
+                        ${transcriptionMode === 'cloud' ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' : ''}
+                        ${transcriptionMode === 'cloud_force' ? 'bg-red-500/10 border-red-500/20 text-red-300' : ''}
+                    `}>
+                        {transcriptionMode === 'local' && (
+                            <span>ℹ️ <b>Yerel Mod:</b> Sadece kendi sunucunu kullanır. Ücretsizdir ama işlemciyi yorar.</span>
+                        )}
+                        {transcriptionMode === 'cloud' && (
+                            <span>ℹ️ <b>Otomatik (Hibrit) Mod:</b> Önce FreeSubtitles servisini dener. Hata alırsa (yoğunluk vb.) otomatik olarak Yerel moda düşer. En güvenli seçenektir.</span>
+                        )}
+                        {transcriptionMode === 'cloud_force' && (
+                            <span>⚠️ <b>Bulut (Zorla) Modu:</b> Sadece FreeSubtitles servisini kullanır. Hata alırsa <u>işlemi durdurur ve hatayı gösterir.</u> Debug için kullanışlıdır.</span>
+                        )}
                     </div>
                 </div>
             )}

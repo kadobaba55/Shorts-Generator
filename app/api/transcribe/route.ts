@@ -82,15 +82,21 @@ export async function POST(req: NextRequest) {
 
                 // HYBRID LOGIC: DB > Env > Local
                 // Check DB Setting first
-                let useExternalStr = process.env.USE_EXTERNAL_SUBTITLES // Default from Env
+                let transcriptionMode = 'local'
+
+                // Fallback from environment if DB is empty/fails
+                if (process.env.USE_EXTERNAL_SUBTITLES === 'true') transcriptionMode = 'cloud' // Legacy Env Support maps to 'cloud' (auto)
+
                 try {
                     const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
-                    if (setting) useExternalStr = setting.value === 'cloud' ? 'true' : 'false'
+                    if (setting) transcriptionMode = setting.value
                 } catch (e) {
                     console.error('Failed to strict-read settings, falling back to env', e)
                 }
 
-                const USE_EXTERNAL = useExternalStr === 'true'
+                // Determine strategy
+                const USE_EXTERNAL = transcriptionMode === 'cloud' || transcriptionMode === 'cloud_force'
+                const FORCE_CLOUD = transcriptionMode === 'cloud_force'
                 let externalSuccess = false
 
                 if (USE_EXTERNAL) {
@@ -170,7 +176,13 @@ export async function POST(req: NextRequest) {
 
                     } catch (extError: any) {
                         console.error('External API Error:', extError.message)
-                        // Fallback Trigger
+
+                        if (FORCE_CLOUD) {
+                            // If forced, do NOT fallback. Rethrow error to be caught by main catch block
+                            throw new Error(`CLOUD_FORCE Mode Error: ${extError.message}`)
+                        }
+
+                        // Fallback Trigger (Only if not forced)
                         updateJob(job.id, { message: 'Bulut servisi yoğun, yerel işlemciye geçiliyor...' })
                     }
                 }
