@@ -470,15 +470,34 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
         }
     }
 
-    // Handle Back with confirmation
-    const handleBack = () => {
+    // Handle Back with confirmation and cleanup
+    const handleBack = async () => {
         if (hasUnsavedChanges) {
-            if (window.confirm(t('editor.unsavedChanges'))) {
-                onBack()
+            if (!window.confirm(t('editor.unsavedChanges'))) {
+                return
             }
-        } else {
-            onBack()
         }
+
+        // Trigger cleanup (fire and forget or await?)
+        // Better to fire and forget so UI doesn't lag, 
+        // OR await to ensure it starts before page unmount kills it?
+        // fetch (keepalive: true) is best for unmount.
+        try {
+            if (videoPath) {
+                // Delete the file from R2
+                // We use keepalive so it survives page navigation
+                fetch('/api/cleanup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoPath }),
+                    keepalive: true
+                }).catch(err => console.error('Cleanup error:', err))
+            }
+        } catch (e) {
+            console.error('Cleanup trigger error:', e)
+        }
+
+        onBack()
     }
 
     // Apply style preset
