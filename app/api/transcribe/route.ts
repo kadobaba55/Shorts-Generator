@@ -171,81 +171,81 @@ export async function POST(req: NextRequest) {
 
         // Job Setup
         const job = createJob('subtitle')
-        const { canStart, position } = enqueueJob(job.id, 'subtitle')
+        const { canStart, position } = enqueueJob(job.id, 'subtitle');
 
-            // Async Processing
-            (async () => {
-                // Wait for queue
-                if (!canStart) {
-                    updateJob(job.id, {
-                        status: 'queued',
-                        message: `Sırada bekleniyor (${position})...`,
-                        queuePosition: position
-                    })
-                    // Simple poll wait
-                    while (true) {
-                        await new Promise(r => setTimeout(r, 1000))
-                        const current = require('@/lib/jobs').getJob(job.id)
-                        if (current?.status === 'processing') break
-                    }
+        // Async Processing
+        (async () => {
+            // Wait for queue
+            if (!canStart) {
+                updateJob(job.id, {
+                    status: 'queued',
+                    message: `Sırada bekleniyor (${position})...`,
+                    queuePosition: position
+                })
+                // Simple poll wait
+                while (true) {
+                    await new Promise(r => setTimeout(r, 1000))
+                    const current = require('@/lib/jobs').getJob(job.id)
+                    if (current?.status === 'processing') break
                 }
+            }
 
-                updateJob(job.id, { status: 'processing', message: 'Ses ayrıştırılıyor...', queuePosition: undefined })
+            updateJob(job.id, { status: 'processing', message: 'Ses ayrıştırılıyor...', queuePosition: undefined })
 
-                const processId = Date.now().toString()
-                const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
+            const processId = Date.now().toString()
+            const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
 
-                try {
-                    // Extract Audio
-                    await execAsync(`ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`)
+            try {
+                // Extract Audio
+                await execAsync(`ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`)
 
-                    // Check Provider Setting
-                    let provider = 'deepgram' // Default
-                    const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
-                    if (setting?.value) provider = setting.value
+                // Check Provider Setting
+                let provider = 'deepgram' // Default
+                const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
+                if (setting?.value) provider = setting.value
 
-                    // If legacy 'cloud' or 'cloud_force' is in DB, map to deepgram
-                    if (provider === 'cloud' || provider === 'cloud_force') provider = 'deepgram'
+                // If legacy 'cloud' or 'cloud_force' is in DB, map to deepgram
+                if (provider === 'cloud' || provider === 'cloud_force') provider = 'deepgram'
 
-                    let result = null
+                let result = null
 
-                    if (provider === 'deepgram') {
-                        try {
-                            result = await transcribeWithDeepgram(job.id, audioPath, language)
-                        } catch (e: any) {
-                            console.error('Deepgram failed, falling back to local?', e)
-                            // Optional: Fallback to local if deepgram fails? 
-                            // User said "preserve whisper as backup". 
-                            // Usually explicit "Backup" means if primary fails. 
-                            // But if Admin selects "Deepgram", maybe they just want Deepgram.
-                            // Let's implement auto-fallback with a toast warning ideally, 
-                            // but here accessing frontend toast is impossible.
-                            // Let's update job message.
-                            updateJob(job.id, { message: 'Deepgram hatası, yerel motora geçiliyor...' })
-                            result = await transcribeWithWhisper(job.id, audioPath, model, language)
-                        }
-                    } else {
-                        // Local
+                if (provider === 'deepgram') {
+                    try {
+                        result = await transcribeWithDeepgram(job.id, audioPath, language)
+                    } catch (e: any) {
+                        console.error('Deepgram failed, falling back to local?', e)
+                        // Optional: Fallback to local if deepgram fails? 
+                        // User said "preserve whisper as backup". 
+                        // Usually explicit "Backup" means if primary fails. 
+                        // But if Admin selects "Deepgram", maybe they just want Deepgram.
+                        // Let's implement auto-fallback with a toast warning ideally, 
+                        // but here accessing frontend toast is impossible.
+                        // Let's update job message.
+                        updateJob(job.id, { message: 'Deepgram hatası, yerel motora geçiliyor...' })
                         result = await transcribeWithWhisper(job.id, audioPath, model, language)
                     }
-
-                    // Cleanup
-                    try { fs.unlinkSync(audioPath) } catch (e) { }
-
-                    completeJob(job.id, 'subtitle')
-                    updateJob(job.id, {
-                        status: 'completed',
-                        progress: 100,
-                        result: result
-                    })
-
-                } catch (err: any) {
-                    console.error('Processing Error:', err)
-                    try { fs.unlinkSync(audioPath) } catch (e) { }
-                    completeJob(job.id, 'subtitle')
-                    updateJob(job.id, { status: 'error', error: err.message })
+                } else {
+                    // Local
+                    result = await transcribeWithWhisper(job.id, audioPath, model, language)
                 }
-            })()
+
+                // Cleanup
+                try { fs.unlinkSync(audioPath) } catch (e) { }
+
+                completeJob(job.id, 'subtitle')
+                updateJob(job.id, {
+                    status: 'completed',
+                    progress: 100,
+                    result: result
+                })
+
+            } catch (err: any) {
+                console.error('Processing Error:', err)
+                try { fs.unlinkSync(audioPath) } catch (e) { }
+                completeJob(job.id, 'subtitle')
+                updateJob(job.id, { status: 'error', error: err.message })
+            }
+        })()
 
         return NextResponse.json({
             success: true,
