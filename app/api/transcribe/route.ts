@@ -19,6 +19,7 @@ import { checkRateLimit } from '@/lib/rateLimit'
 import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
 // --- DEEPGRAM LOGIC ---
+// --- DEEPGRAM LOGIC ---
 async function transcribeWithDeepgram(jobId: string, audioPath: string, language: string) {
     updateJob(jobId, { message: 'Deepgram ile işleniyor (Hızlı Mod)...' })
 
@@ -48,47 +49,72 @@ async function transcribeWithDeepgram(jobId: string, audioPath: string, language
     const alternative = result.results.channels[0].alternatives[0]
     const words = alternative.words || []
 
-    // Convert Deepgram words to our "SubtitleSegment" format
-    // Deepgram word: { word: "Hello", start: 0.5, end: 1.0, confidence: 0.99 }
-    // We want: [{ id: 1, start: 0.5, end: 1.0, text: "Hello" }]
-    // But usually we want grouped segments (phrases). 
-    // For now, let's map words directly or use paragraphs if available. 
-    // The existing UI handles word-level animation well.
-    // Let's assume we map words to segments for maximum granularity, 
-    // OR we relies on paragraphs.
-
-    // Better approach: Use paragraphs for segments if available, otherwise words
-    // Deepgram Nova-2 supports paragraphs.
+    // --- SMART SEGMENTATION FOR SHORTS ---
+    // Instead of using big paragraphs, we chunk words into small groups.
+    // Goal: 1-5 words per segment, max 2 seconds duration if possible, optimal for reading.
 
     let segments: any[] = []
+    let currentSegment: { start: number, end: number, text: string, words: any[] } | null = null
+    let segmentIndex = 1
 
-    if (alternative.paragraphs?.paragraphs) {
-        // Map paragraphs to segments
-        segments = alternative.paragraphs.paragraphs.map((p: any, index: number) => ({
-            id: index + 1,
-            start: p.start,
-            end: p.end,
-            text: p.sentences.map((s: any) => s.text).join(' ')
-        }))
-    } else {
-        // Fallback to simpler segmentation if no paragraphs (e.g. just grouping words or returning single segment?)
-        // Let's rely on transcript string if we have to, but words are better.
-        // Let's create small groups of words (e.g. 5-10 words) if no paragraphs
-        // Actually, returning words as segments might be too granular for specific UI "cards", 
-        // but our editor supports word-level editing.
-        // Let's construct segments from sentences if available?
-        // Deepgram usually provides sentences in newer models inside paragraphs or just text.
+    const MAX_WORDS_PER_SEGMENT = 4
+    const MAX_CHARS_PER_SEGMENT = 35 // Max characters per line approx
 
-        // Let's manually chunk words if needed. 
-        // Re-reading deepgram docs: paragraphs are standart in nova-2.
+    for (const wordObj of words) {
+        const word = wordObj.word
+        const start = wordObj.start
+        const end = wordObj.end
 
-        // Final Fallback: Single segment
-        segments = [{
+        if (!currentSegment) {
+            currentSegment = { start, end, text: word, words: [wordObj] }
+            continue
+        }
+
+        // Check limits
+        const newText = currentSegment.text + " " + word
+        const wordCount = currentSegment.words.length + 1
+        // const duration = end - currentSegment.start
+
+        // Break if:
+        // 1. Too many words
+        // 2. Too many characters
+        // 3. (Optional) Pause/Silence detection could happen here based on time gap vs previous word
+        if (wordCount > MAX_WORDS_PER_SEGMENT || newText.length > MAX_CHARS_PER_SEGMENT) {
+            // Push old segment
+            segments.push({
+                id: segmentIndex++,
+                start: currentSegment.start,
+                end: currentSegment.end,
+                text: currentSegment.text
+            })
+            // Start new
+            currentSegment = { start, end, text: word, words: [wordObj] }
+        } else {
+            // Append
+            currentSegment.end = end
+            currentSegment.text = newText
+            currentSegment.words.push(wordObj)
+        }
+    }
+
+    // Push last segment
+    if (currentSegment) {
+        segments.push({
+            id: segmentIndex++,
+            start: currentSegment.start,
+            end: currentSegment.end,
+            text: currentSegment.text
+        })
+    }
+
+    // Fallback if no words found but transcript exists (rare)
+    if (segments.length === 0 && alternative.transcript) {
+        segments.push({
             id: 1,
             start: 0,
             end: alternative.words?.[alternative.words.length - 1]?.end || 0,
             text: alternative.transcript
-        }]
+        })
     }
 
     return {
