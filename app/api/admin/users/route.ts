@@ -91,3 +91,61 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ error: "Failed to delete user" }, { status: 500 })
     }
 }
+export async function PATCH(req: Request) {
+    try {
+        const session = await getServerSession(authOptions)
+
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+
+        // @ts-ignore
+        if (session.user.role !== 'ADMIN') {
+            return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 })
+        }
+
+        const body = await req.json()
+        const { id, action, tokens, subscriptionPlan, role } = body
+
+        if (!id) {
+            return NextResponse.json({ error: "User ID required" }, { status: 400 })
+        }
+
+        // Handle specific actions like block/unblock
+        if (action === 'block') {
+            const updated = await prisma.user.update({
+                where: { id },
+                data: { subscriptionPlan: 'BLOCKED' }
+            })
+            return NextResponse.json({ success: true, user: updated })
+        }
+
+        if (action === 'unblock') {
+            const updated = await prisma.user.update({
+                where: { id },
+                data: { subscriptionPlan: 'FREE' } // Default to FREE on unblock
+            })
+            return NextResponse.json({ success: true, user: updated })
+        }
+
+        // Handle general update
+        const updateData: any = {}
+        if (tokens !== undefined) updateData.tokens = Number(tokens)
+        if (subscriptionPlan !== undefined) updateData.subscriptionPlan = subscriptionPlan
+        // if (role !== undefined) updateData.role = role // If we want to support role change
+
+        if (Object.keys(updateData).length > 0) {
+            const updated = await prisma.user.update({
+                where: { id },
+                data: updateData
+            })
+            return NextResponse.json({ success: true, user: updated })
+        }
+
+        return NextResponse.json({ error: "No update data provided" }, { status: 400 })
+
+    } catch (error) {
+        console.error("Update user error:", error)
+        return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
+    }
+}

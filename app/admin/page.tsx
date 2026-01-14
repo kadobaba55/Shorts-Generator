@@ -178,6 +178,28 @@ export default function AdminPage() {
         }
     }
 
+    const handleUpdateUser = async (id: string, data: any) => {
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, ...data })
+            })
+
+            if (!res.ok) throw new Error('Update failed')
+
+            const { user: updatedUser } = await res.json()
+
+            setUsers(users.map(u =>
+                u.id === id ? { ...u, ...updatedUser, usageCount: u.usageCount } : u
+            ))
+            toast.success('User updated successfully')
+        } catch (error) {
+            console.error('Update error:', error)
+            toast.error('Failed to update user')
+        }
+    }
+
     if (status === 'loading') return null
 
     return (
@@ -222,6 +244,7 @@ export default function AdminPage() {
                             loading={isLoading}
                             onDelete={handleDeleteUser}
                             onBlock={handleBlockUser}
+                            onUpdate={handleUpdateUser}
                         />
                     </div>
 
