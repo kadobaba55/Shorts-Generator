@@ -105,10 +105,18 @@ export async function POST(req: NextRequest) {
                             body: formData
                         })
 
-                        if (uploadRes.status === 429) throw new Error('External API Rate Limit (429)')
-                        if (!uploadRes.ok) throw new Error(`External API Upload Failed: ${uploadRes.status} ${uploadRes.statusText}`)
+                        if (uploadRes.status === 429) {
+                            throw new Error('External API Rate Limit (429) - Çok fazla istek gönderildi.')
+                        }
+
+                        if (!uploadRes.ok) {
+                            const errorText = await uploadRes.text()
+                            console.error('External API Error Body:', errorText)
+                            throw new Error(`External API Upload Failed: ${uploadRes.status} ${uploadRes.statusText} - ${errorText.substring(0, 200)}`)
+                        }
+
                         const uploadData = await uploadRes.json()
-                        const externalId = uploadData.id // Assuming 'id' is returned based on typical patterns
+                        const externalId = uploadData.id
 
                         if (!externalId) throw new Error('External API returned no ID')
 
