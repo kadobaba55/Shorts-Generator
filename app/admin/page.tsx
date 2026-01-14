@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast'
 import AdminStatsCard from '@/components/admin/AdminStatsCard'
 import AdminUserTable from '@/components/admin/AdminUserTable'
 import AdminCookieManager from '@/components/admin/AdminCookieManager'
+import AdminSettings from '@/components/admin/AdminSettings'
 
 interface User {
     id: string
@@ -207,7 +208,13 @@ export default function AdminPage() {
                 {/* Stats Cards */}
                 <AdminStatsCard stats={stats} loading={statsLoading} />
 
+                {/* System Settings - New Added Component */}
+                <div className="mt-6 mb-6">
+                    <AdminSettings />
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
                     {/* User Table (Span 2) */}
                     <div className="lg:col-span-2">
                         <AdminUserTable

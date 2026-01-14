@@ -3,7 +3,9 @@ import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
+import { PrismaClient } from '@prisma/client'
 
+const prisma = new PrismaClient()
 const execAsync = promisify(exec)
 const TEMP_DIR = path.join(process.cwd(), 'temp')
 
@@ -16,7 +18,7 @@ import { checkRateLimit } from '@/lib/rateLimit'
 import { createJob, updateJob, enqueueJob, completeJob } from '@/lib/jobs'
 
 export async function POST(req: NextRequest) {
-    // 1. Rate Limit Check (Whisper pahalı bir işlem, sıkı limit: 10/saat)
+    // 1. Rate Limit Check (10 requests per hour)
     const ip = req.headers.get('x-forwarded-for') || 'anonymous'
     const rate = checkRateLimit(ip, 10, 60 * 60 * 1000)
 
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
         // Generate unique ID & Job
         const processId = Date.now().toString()
         const audioPath = path.join(TEMP_DIR, `${processId}.wav`)
-        const job = createJob('subtitle') // 'subtitle' queue uses limit: 1 (Sequential)
+        const job = createJob('subtitle')
 
         // Enqueue the job
         const { canStart, position } = enqueueJob(job.id, 'subtitle')
@@ -75,12 +77,20 @@ export async function POST(req: NextRequest) {
                 console.log('Starting transcription for:', videoPath)
 
                 // Step 1: Extract Audio
-                // Uses -vn (no video), -ac 1 (mono), -ar 16000 (16kHz) for Whisper
                 const extractCmd = `ffmpeg -y -i "${inputPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}"`
                 await execAsync(extractCmd)
 
-                // HYBRID LOGIC: External API vs Local Python
-                const USE_EXTERNAL = process.env.USE_EXTERNAL_SUBTITLES === 'true'
+                // HYBRID LOGIC: DB > Env > Local
+                // Check DB Setting first
+                let useExternalStr = process.env.USE_EXTERNAL_SUBTITLES // Default from Env
+                try {
+                    const setting = await prisma.systemSetting.findUnique({ where: { key: 'transcription_mode' } })
+                    if (setting) useExternalStr = setting.value === 'cloud' ? 'true' : 'false'
+                } catch (e) {
+                    console.error('Failed to strict-read settings, falling back to env', e)
+                }
+
+                const USE_EXTERNAL = useExternalStr === 'true'
                 let externalSuccess = false
 
                 if (USE_EXTERNAL) {
@@ -125,7 +135,6 @@ export async function POST(req: NextRequest) {
 
                         let result = null
                         let attempts = 0
-                        const maxAttempts = 60 // 1 minute roughly? Maybe more. 5 mins = 300
 
                         while (attempts < 300) {
                             await new Promise(r => setTimeout(r, 2000)) // 2s polling
@@ -134,12 +143,11 @@ export async function POST(req: NextRequest) {
                             if (statusRes.ok) {
                                 const statusData = await statusRes.json()
                                 if (statusData.status === 'completed') {
-                                    result = statusData // Check structure
+                                    result = statusData
                                     break
                                 } else if (statusData.status === 'failed') {
                                     throw new Error('External transcription status: failed')
                                 }
-                                // progress?
                                 if (statusData.progress) {
                                     updateJob(job.id, { message: `Bulutta işleniyor... %${Math.round(statusData.progress)}` })
                                 }
@@ -149,29 +157,22 @@ export async function POST(req: NextRequest) {
 
                         if (!result) throw new Error('External API polling timed out')
 
-                        // 3. Format Result (Adapt External JSON to our format)
-                        // Assuming result contains segments similar to Whisper
-                        // We might need to map it. For now, saving raw result to check.
-                        // But we need consistency for SubtitleEditor.
-
-                        // Clean up audio
+                        // 3. Success
                         try { fs.unlinkSync(audioPath) } catch (e) { }
                         completeJob(job.id, 'subtitle')
 
                         updateJob(job.id, {
                             status: 'completed',
                             progress: 100,
-                            result: result // Ensure this matches expected structure
+                            result: result
                         })
                         externalSuccess = true
 
                     } catch (extError: any) {
                         console.error('External API Error:', extError.message)
-                        // FALLBACK TRIGGER
+                        // Fallback Trigger
                         updateJob(job.id, { message: 'Bulut servisi yoğun, yerel işlemciye geçiliyor...' })
-                        // We do NOT throw here. We just let flow continue to Local block if externalSuccess is false.
                     }
-
                 }
 
                 // LOCAL FALLBACK / DEFAULT LOGIC
@@ -180,10 +181,8 @@ export async function POST(req: NextRequest) {
 
                     // Step 2: Run Python Transcription Script (LOCAL)
                     const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe_json.py')
-
-                    // Use spawn to capture large JSON output safely
-                    // Use venv python for faster-whisper
                     const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python')
+
                     const pythonProcess = spawn(pythonPath, [
                         scriptPath,
                         audioPath,
@@ -195,7 +194,7 @@ export async function POST(req: NextRequest) {
                     let stderrData = ''
 
                     await new Promise<void>((resolve, reject) => {
-                        // Timeout (10 minutes max for transcription)
+                        // Timeout (10 minutes max)
                         const timeout = setTimeout(() => {
                             pythonProcess.kill()
                             reject(new Error('Transcription process timed out (10 minutes limit)'))
@@ -204,15 +203,13 @@ export async function POST(req: NextRequest) {
                         pythonProcess.stdout.on('data', (data) => {
                             const str = data.toString()
                             stdoutData += str
-                            console.log(`[Whisper STDOUT]: ${str.substring(0, 100)}...`) // Log snippet
+                            console.log(`[Whisper STDOUT]: ${str.substring(0, 100)}...`)
                         })
 
                         pythonProcess.stderr.on('data', (data) => {
                             const str = data.toString()
                             stderrData += str
                             console.log(`[Whisper STDERR]: ${str}`)
-
-                            // Detect model downloading state
                             if (str.includes('Downloading') || str.includes('%')) {
                                 updateJob(job.id, { message: 'AI Modeli indiriliyor (Bu işlem biraz sürebilir)...' })
                             }
@@ -220,44 +217,30 @@ export async function POST(req: NextRequest) {
 
                         pythonProcess.on('close', (code) => {
                             clearTimeout(timeout)
-
-                            // Cleanup audio file
-                            try { fs.unlinkSync(audioPath) } catch (e) { console.error('Cleanup error:', e) }
-
-                            // Always release the slot!
+                            try { fs.unlinkSync(audioPath) } catch (e) { }
                             completeJob(job.id, 'subtitle')
-
                             if (code !== 0) {
-                                console.error('Transcription failed:', stderrData)
                                 reject(new Error(stderrData || 'Transcription process failed'))
                                 return
                             }
-
                             try {
-                                // Find the last valid JSON in output
                                 const jsonStart = stdoutData.indexOf('{')
                                 const jsonEnd = stdoutData.lastIndexOf('}')
-
                                 if (jsonStart === -1 || jsonEnd === -1) {
-                                    console.error('Invalid JSON Output:', stdoutData)
                                     reject(new Error('Invalid JSON output from script'))
                                     return
                                 }
-
                                 const jsonStr = stdoutData.substring(jsonStart, jsonEnd + 1)
                                 const result = JSON.parse(jsonStr)
-
                                 if (result.error) {
                                     reject(new Error(result.error))
                                     return
                                 }
-
                                 updateJob(job.id, {
                                     status: 'completed',
                                     progress: 100,
                                     result: result
                                 })
-
                                 resolve()
                             } catch (e: any) {
                                 reject(new Error(`Failed to parse transcription output: ${e.message}`))
@@ -268,13 +251,7 @@ export async function POST(req: NextRequest) {
 
             } catch (error: any) {
                 console.error('Transcribe API Error:', error)
-                // Release slot if not already released (safety check handled by completeJob logic if ID missing/duplicate removal ok)
-                // But generally completeJob handles the removal. 
-                // In the catch block above (inside spawn close), we call completeJob.
-                // If error happens BEFORE spawn (e.g. ffmpeg extract), we need to call it here.
-                // To be safe, we can call it here too? No, active.delete returns false if not found. Safe.
                 completeJob(job.id, 'subtitle')
-
                 updateJob(job.id, { status: 'error', error: error.message })
             }
         }
