@@ -414,87 +414,89 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             {/* Content */}
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-                {/* Left: Video Preview with Live Subtitles */}
-                <div className="w-full lg:w-1/2 p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 bg-black/20">
-                    <div className="relative aspect-[9/16] max-h-[50vh] lg:max-h-[70vh] mx-auto bg-black rounded border border-gray-800 overflow-hidden mb-4 lg:mb-6 shadow-2xl shadow-neon-green/5">
-                        <video
-                            ref={videoRef}
-                            src={videoPath}
-                            className="w-full h-full object-contain"
-                            onTimeUpdate={handleTimeUpdate}
-                            onPlay={() => setIsPlaying(true)}
-                            onPause={() => setIsPlaying(false)}
-                            playsInline
-                        />
+                {/* Left: Video Preview with Live Subtitles - Only show in edit mode */}
+                {currentStep === 'edit' && (
+                    <div className="w-full lg:w-1/2 p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 bg-black/20">
+                        <div className="relative aspect-[9/16] max-h-[50vh] lg:max-h-[70vh] mx-auto bg-black rounded border border-gray-800 overflow-hidden mb-4 lg:mb-6 shadow-2xl shadow-neon-green/5">
+                            <video
+                                ref={videoRef}
+                                src={videoPath}
+                                className="w-full h-full object-contain"
+                                onTimeUpdate={handleTimeUpdate}
+                                onPlay={() => setIsPlaying(true)}
+                                onPause={() => setIsPlaying(false)}
+                                playsInline
+                            />
 
-                        {/* Live Subtitle Preview Overlay */}
-                        {activeSegment && currentStep === 'edit' && (
-                            <div
-                                className={`absolute left-0 right-0 px-4 text-center pointer-events-none ${position === 'bottom' ? 'bottom-16' :
-                                    position === 'middle' ? 'top-1/2 -translate-y-1/2' :
-                                        'top-16'
-                                    }`}
-                            >
-                                <motion.span
-                                    key={activeSegment.id}
-                                    initial={
-                                        animation === 'pop' ? { scale: 0.5, opacity: 0 } :
-                                            animation === 'fade' ? { opacity: 0 } :
-                                                animation === 'slide' ? { x: -50, opacity: 0 } :
-                                                    {}
-                                    }
-                                    animate={
-                                        animation === 'pop' ? { scale: 1, opacity: 1 } :
-                                            animation === 'fade' ? { opacity: 1 } :
-                                                animation === 'slide' ? { x: 0, opacity: 1 } :
-                                                    {}
-                                    }
-                                    className="inline-block px-3 py-1 rounded leading-normal"
-                                    style={{
-                                        fontFamily: customFont,
-                                        fontSize: `${selectedStyle.fontSize}px`,
-                                        color: customColor,
-                                        textShadow: `2px 2px 4px ${selectedStyle.outlineColor}, -2px -2px 4px ${selectedStyle.outlineColor}`,
-                                        fontWeight: 'bold',
-                                    }}
+                            {/* Live Subtitle Preview Overlay */}
+                            {activeSegment && (
+                                <div
+                                    className={`absolute left-0 right-0 px-4 text-center pointer-events-none ${position === 'bottom' ? 'bottom-16' :
+                                        position === 'middle' ? 'top-1/2 -translate-y-1/2' :
+                                            'top-16'
+                                        }`}
                                 >
-                                    {activeSegment.text.replace(/\*\*/g, '')}
-                                </motion.span>
-                            </div>
-                        )}
+                                    <motion.span
+                                        key={activeSegment.id}
+                                        initial={
+                                            animation === 'pop' ? { scale: 0.5, opacity: 0 } :
+                                                animation === 'fade' ? { opacity: 0 } :
+                                                    animation === 'slide' ? { x: -50, opacity: 0 } :
+                                                        {}
+                                        }
+                                        animate={
+                                            animation === 'pop' ? { scale: 1, opacity: 1 } :
+                                                animation === 'fade' ? { opacity: 1 } :
+                                                    animation === 'slide' ? { x: 0, opacity: 1 } :
+                                                        {}
+                                        }
+                                        className="inline-block px-3 py-1 rounded leading-normal"
+                                        style={{
+                                            fontFamily: customFont,
+                                            fontSize: `${selectedStyle.fontSize}px`,
+                                            color: customColor,
+                                            textShadow: `2px 2px 4px ${selectedStyle.outlineColor}, -2px -2px 4px ${selectedStyle.outlineColor}`,
+                                            fontWeight: 'bold',
+                                        }}
+                                    >
+                                        {activeSegment.text.replace(/\*\*/g, '')}
+                                    </motion.span>
+                                </div>
+                            )}
 
-                        {/* Play/Pause Overlay Button */}
-                        <button
-                            onClick={togglePlay}
-                            className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity"
-                        >
-                            <span className="text-6xl filter drop-shadow-lg">{isPlaying ? '⏸️' : '▶️'}</span>
-                        </button>
-                    </div>
+                            {/* Play/Pause Overlay Button */}
+                            <button
+                                onClick={togglePlay}
+                                className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity"
+                            >
+                                <span className="text-6xl filter drop-shadow-lg">{isPlaying ? '⏸️' : '▶️'}</span>
+                            </button>
+                        </div>
 
-                    {/* Video Controls */}
-                    <div className="max-w-md mx-auto w-full">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="font-mono text-sm text-neon-green">
-                                {formatTime(videoTime)}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => seekRelative(-5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
-                                    -5s
-                                </button>
-                                <button onClick={togglePlay} className="px-6 py-1.5 bg-neon-green/10 border border-neon-green rounded text-xs text-neon-green hover:bg-neon-green/20 font-mono w-24">
-                                    {isPlaying ? 'PAUSE' : 'PLAY'}
-                                </button>
-                                <button onClick={() => seekRelative(5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
-                                    +5s
-                                </button>
+                        {/* Video Controls */}
+                        <div className="max-w-md mx-auto w-full">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="font-mono text-sm text-neon-green">
+                                    {formatTime(videoTime)}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => seekRelative(-5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
+                                        -5s
+                                    </button>
+                                    <button onClick={togglePlay} className="px-6 py-1.5 bg-neon-green/10 border border-neon-green rounded text-xs text-neon-green hover:bg-neon-green/20 font-mono w-24">
+                                        {isPlaying ? 'PAUSE' : 'PLAY'}
+                                    </button>
+                                    <button onClick={() => seekRelative(5)} className="px-3 py-1.5 bg-gray-800 rounded text-xs hover:bg-gray-700 font-mono">
+                                        +5s
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Right: Editor Panels */}
-                <div className="w-full lg:w-1/2 flex flex-col bg-[#0f0f0f] flex-1">
+                <div className={`flex flex-col bg-[#0f0f0f] flex-1 ${currentStep === 'transcribe' ? 'w-full' : 'w-full lg:w-1/2'}`}>
                     {currentStep === 'transcribe' ? (
                         <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-6 lg:p-10">
                             <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
