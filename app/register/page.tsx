@@ -106,8 +106,8 @@ export default function RegisterPage() {
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                className="input"
-                                placeholder="John Doe"
+                                className="w-full px-4 py-3 bg-kado-bg border border-kado-border rounded-xl focus:border-kado-primary focus:ring-1 focus:ring-kado-primary transition-all text-kado-text font-body"
+                                placeholder="Adınız Soyadınız"
                                 required
                             />
                         </div>
@@ -120,7 +120,7 @@ export default function RegisterPage() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="input"
+                                className="w-full px-4 py-3 bg-kado-bg border border-kado-border rounded-xl focus:border-kado-primary focus:ring-1 focus:ring-kado-primary transition-all text-kado-text font-body"
                                 placeholder="ornek@email.com"
                                 required
                             />
@@ -134,7 +134,7 @@ export default function RegisterPage() {
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="input"
+                                className="w-full px-4 py-3 bg-kado-bg border border-kado-border rounded-xl focus:border-kado-primary focus:ring-1 focus:ring-kado-primary transition-all text-kado-text font-body"
                                 placeholder="••••••••"
                                 required
                             />
