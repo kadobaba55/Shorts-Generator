@@ -143,7 +143,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="grid grid-cols-3 gap-4 pt-8"
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8"
                 >
                     {[
                         { title: t('home.features.smartCut'), desc: t('home.features.smartCutDesc') },
@@ -172,7 +172,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.6 }}
-                    className="flex items-center justify-center gap-6 pt-4 text-kado-text-muted text-xs font-body"
+                    className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 pt-4 text-kado-text-muted text-xs font-body"
                 >
                     <span className="flex items-center gap-1">
                         <span className="text-kado-success">✓</span> {t('home.trust.free')}

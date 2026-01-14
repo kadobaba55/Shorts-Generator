@@ -411,11 +411,11 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
             </div>
 
             {/* Content */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
                 {/* Left: Video Preview with Live Subtitles */}
-                <div className="w-1/2 p-6 flex flex-col border-r border-gray-800 bg-black/20">
-                    <div className="relative aspect-[9/16] max-h-[70vh] mx-auto bg-black rounded border border-gray-800 overflow-hidden mb-6 shadow-2xl shadow-neon-green/5">
+                <div className="w-full lg:w-1/2 p-4 lg:p-6 flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800 bg-black/20">
+                    <div className="relative aspect-[9/16] max-h-[50vh] lg:max-h-[70vh] mx-auto bg-black rounded border border-gray-800 overflow-hidden mb-4 lg:mb-6 shadow-2xl shadow-neon-green/5">
                         <video
                             ref={videoRef}
                             src={videoPath}
@@ -493,7 +493,7 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
                 </div>
 
                 {/* Right: Editor Panels */}
-                <div className="w-1/2 flex flex-col bg-[#0f0f0f]">
+                <div className="w-full lg:w-1/2 flex flex-col bg-[#0f0f0f] flex-1">
                     {currentStep === 'transcribe' ? (
                         <div className="flex-1 flex flex-col items-center justify-center space-y-8 p-10">
                             <div className="w-24 h-24 rounded-full bg-neon-green/10 flex items-center justify-center border border-neon-green/30">
