@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react'
 interface ProcessedClip {
     id: string
     videoPath: string
+    originalUrl?: string // The ORIGINAL clean video without subtitles
     subtitledPath?: string
     start: number
     end: number

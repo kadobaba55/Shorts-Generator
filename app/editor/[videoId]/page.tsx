@@ -13,6 +13,7 @@ import { useLanguage } from '@/components/LanguageProvider'
 interface ProcessedClip {
     id: string
     videoPath: string
+    originalUrl?: string // The ORIGINAL clean video without subtitles
     subtitledPath?: string
     start: number
     end: number
@@ -62,6 +63,8 @@ export default function EditorPage() {
                 // Convert clips to ProcessedClip format
                 const clips: ProcessedClip[] = data.clips.map((clipDataRaw, index) => {
                     let videoPath = clipDataRaw
+                    let originalUrl = clipDataRaw // Track original clean video
+                    let subtitledPath: string | undefined = undefined
                     let paddingStart = 0
 
                     let hasSubtitles = false
@@ -71,7 +74,11 @@ export default function EditorPage() {
                     try {
                         const parsed = JSON.parse(clipDataRaw)
                         if (parsed.url) {
-                            videoPath = parsed.url
+                            // originalUrl is the clean video without subtitles
+                            originalUrl = parsed.originalUrl || parsed.url
+                            subtitledPath = parsed.subtitledPath
+                            // For preview, use subtitled version if available
+                            videoPath = subtitledPath || parsed.url
                             paddingStart = parsed.paddingStart || 0
                             hasSubtitles = parsed.hasSubtitles || false
                             subtitleSegments = parsed.subtitleSegments || []
@@ -79,6 +86,7 @@ export default function EditorPage() {
                         }
                     } catch (e) {
                         // Not JSON, assume string URL
+                        originalUrl = clipDataRaw
                     }
 
                     const originalStart = data.originalClips[index]?.start || 0
@@ -87,7 +95,9 @@ export default function EditorPage() {
 
                     return {
                         id: `clip_${index + 1}`,
-                        videoPath: videoPath,
+                        videoPath: videoPath, // For preview - uses subtitledPath if available
+                        originalUrl: originalUrl, // Original clean video for re-burning
+                        subtitledPath: subtitledPath,
                         start: originalStart,
                         end: originalEnd,
                         duration: duration,
