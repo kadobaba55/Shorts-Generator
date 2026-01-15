@@ -223,12 +223,20 @@ export async function POST(request: NextRequest) {
         console.log('Burning subtitles...')
         await execAsync(burnSubsCmd, { timeout: 300000 }) // 5 min timeout
 
-        // Cleanup
+        // Cleanup SRT file
         try { fs.unlinkSync(srtPath) } catch (e) { }
+
+        // Upload subtitled video to R2 for consistent access
+        console.log('Uploading subtitled video to storage...')
+        const { handleClipStorage } = await import('@/lib/storage')
+        const r2Key = `subtitled/${outputId}_subtitled.mp4`
+        const publicUrl = await handleClipStorage(outputPath, r2Key)
+
+        console.log('✅ Subtitled video saved:', publicUrl)
 
         return NextResponse.json({
             success: true,
-            outputPath: `/output/${outputId}_subtitled.mp4`,
+            outputPath: publicUrl, // R2 URL (or local path in local mode)
             message: 'Altyazı başarıyla eklendi'
         })
 
