@@ -522,8 +522,8 @@ export default function VideoEditor({
                                     CLIP_{String(selectedClipIndex + 1).padStart(2, '0')}
                                 </div>
 
-                                {/* Live Subtitle Preview Overlay */}
-                                {selectedClip && selectedClip.hasSubtitles && selectedClip.subtitleSegments && (
+                                {/* Live Subtitle Preview Overlay - ONLY show if video does NOT have burned subtitles */}
+                                {selectedClip && selectedClip.hasSubtitles && selectedClip.subtitleSegments && !selectedClip.subtitledPath && (
                                     (() => {
                                         // Find active segment
                                         const activeSegment = selectedClip.subtitleSegments.find((seg: any) =>
