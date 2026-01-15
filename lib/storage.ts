@@ -106,16 +106,20 @@ export async function getR2Stats() {
     }
 
     try {
+        console.log('📊 Fetching R2 stats from bucket:', BUCKET_NAME)
         let continuationToken: string | undefined = undefined
         let totalSize = 0
         let count = 0
+        let pageCount = 0
 
         do {
             const command = new ListObjectsV2Command({
                 Bucket: BUCKET_NAME,
-                ContinuationToken: continuationToken
+                ContinuationToken: continuationToken,
+                MaxKeys: 1000 // Ensure we get max objects per page
             })
             const response = await s3Client.send(command) as any
+            pageCount++
 
             if (response.Contents) {
                 for (const obj of response.Contents) {
@@ -125,8 +129,12 @@ export async function getR2Stats() {
                     }
                 }
             }
+
+            console.log(`📄 R2 Page ${pageCount}: Found ${response.Contents?.length || 0} objects, Running total: ${count}`)
             continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
         } while (continuationToken)
+
+        console.log(`✅ R2 Stats Complete: ${count} objects, ${(totalSize / 1024 / 1024).toFixed(2)} MB`)
 
         cachedR2Stats = {
             used: totalSize,
@@ -135,7 +143,7 @@ export async function getR2Stats() {
         }
         return cachedR2Stats
     } catch (error) {
-        console.error('Failed to get R2 stats:', error)
+        console.error('❌ Failed to get R2 stats:', error)
         return { used: 0, count: 0, lastUpdate: 0 }
     }
 }
