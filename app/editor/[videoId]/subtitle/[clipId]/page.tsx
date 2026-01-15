@@ -124,7 +124,15 @@ export default function SubtitleStudioPage() {
                 ? originalVideoUrl
                 : originalVideoUrl.replace(/^\//, '') // Remove leading slash for local paths
 
-            console.log('Burning subtitles onto ORIGINAL video:', videoPathForApi)
+            // DEBUG: Log exactly what we're sending
+            console.log('=== SUBTITLE SAVE DEBUG ===')
+            console.log('Clip ID:', clip.id)
+            console.log('Original URL:', originalVideoUrl)
+            console.log('Video Path for API:', videoPathForApi)
+            console.log('Total Segments:', segments.length)
+            console.log('First 3 Segments:', segments.slice(0, 3).map(s => ({ start: s.start, end: s.end, text: s.text })))
+            console.log('Style:', { id: style.id, font: style.font, color: style.primaryColor })
+            console.log('===========================')
 
             const response = await fetch('/api/subtitle', {
                 method: 'POST',

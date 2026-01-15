@@ -90,6 +90,19 @@ export async function POST(request: NextRequest) {
             highlightKeywords = false
         } = body
 
+        // DEBUG: Log incoming request data
+        console.log('=== SUBTITLE API RECEIVED ===')
+        console.log('Video Path:', videoPath)
+        console.log('Style:', style, 'Font:', font, 'Color:', primaryColor)
+        console.log('Segments count:', segments?.length)
+        if (segments && segments.length > 0) {
+            console.log('First 3 segments:')
+            segments.slice(0, 3).forEach((s: any, i: number) => {
+                console.log(`  ${i + 1}. [${s.start?.toFixed(2)}s - ${s.end?.toFixed(2)}s] "${s.text}"`)
+            })
+        }
+        console.log('=============================')
+
         if (!videoPath) {
             return NextResponse.json({ error: 'Video path required' }, { status: 400 })
         }
