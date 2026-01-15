@@ -114,24 +114,24 @@ export default function SubtitlePage({ videoPath, initialSegments = [], onSave, 
     const [history, setHistory] = useState<SubtitleSegment[][]>([])
     const [historyIndex, setHistoryIndex] = useState(-1)
 
+    // Warn user before page reload/close
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (videoPath) {
+                const message = t('editor.unsavedChanges')
+                e.preventDefault()
+                e.returnValue = message
+                return message
+            }
+        }
+
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [videoPath, t])
+
     // Load waveform data
     useEffect(() => {
         if (!videoPath) return
-
-        // Warn user before page reload/close
-        useEffect(() => {
-            const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-                if (videoPath) {
-                    const message = t('editor.unsavedChanges')
-                    e.preventDefault()
-                    e.returnValue = message
-                    return message
-                }
-            }
-
-            window.addEventListener('beforeunload', handleBeforeUnload)
-            return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-        }, [videoPath, t])
 
         const fetchAudio = async () => {
             try {
