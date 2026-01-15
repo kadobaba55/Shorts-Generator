@@ -1,5 +1,7 @@
+'use client'
+
 import { useState } from 'react'
-import { useLanguage } from './LanguageProvider'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface ConfigStepProps {
     videoInfo: { title: string; duration: number } | null

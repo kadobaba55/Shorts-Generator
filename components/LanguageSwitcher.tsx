@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { useLanguage } from './LanguageProvider'
+import { useLanguage } from '@/components/LanguageProvider'
 import { Locale } from '@/lib/dictionary'
 
 const languages: { code: Locale; label: string; flag: string }[] = [

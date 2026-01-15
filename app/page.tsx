@@ -53,13 +53,20 @@ export default function Home() {
             console.log('Download started, Job ID:', jobId)
 
             // Poll for status
+            let isMounted = true
             const pollInterval = setInterval(async () => {
+                if (!isMounted) {
+                    clearInterval(pollInterval)
+                    return
+                }
                 try {
                     const statusRes = await fetch(`/api/status?id=${jobId}`)
                     if (!statusRes.ok) return
 
                     const job = await statusRes.json()
                     console.log('Download Job Status:', job)
+
+                    if (!isMounted) return
 
                     if (job.status === 'processing') {
                         setDownloadProgress(job.progress)
@@ -75,8 +82,7 @@ export default function Home() {
                         }
                     } else if (job.status === 'completed') {
                         clearInterval(pollInterval)
-                        setDownloadProgress(100)
-                        setDownloadETA('Tamamlandı!')
+                        isMounted = false
 
                         const { videoPath, title, duration } = job.result
 
@@ -95,13 +101,12 @@ export default function Home() {
 
                         toast.success('Video indirildi!')
 
-                        // Redirect to config page
-                        setTimeout(() => {
-                            router.push(`/config/${videoId}`)
-                        }, 500)
+                        // Redirect to config page immediately
+                        router.push(`/config/${videoId}`)
 
                     } else if (job.status === 'error') {
                         clearInterval(pollInterval)
+                        isMounted = false
                         throw new Error(job.error || 'İndirme hatası')
                     }
                 } catch (e) {

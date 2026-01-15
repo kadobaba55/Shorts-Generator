@@ -1,3 +1,5 @@
+'use client'
+
 import { useState } from 'react'
 
 interface User {
@@ -86,7 +88,7 @@ export default function AdminUserTable({ users, loading, onDelete, onBlock, onUp
                             placeholder="Search users..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-bg-main border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-neon-green focus:ring-1 focus:ring-neon-green placeholder-gray-600 transition-all font-mono"
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-neon-green focus:ring-1 focus:ring-neon-green placeholder-gray-600 transition-all font-mono"
                         />
                     </div>
                 </div>

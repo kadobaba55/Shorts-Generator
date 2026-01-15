@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import LanguageSwitcher from './LanguageSwitcher'
-import { useLanguage } from './LanguageProvider'
+import { useLanguage } from '@/components/LanguageProvider'
 
 interface HeroProps {
     onVideoSubmit: (url: string) => void
