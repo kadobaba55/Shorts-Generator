@@ -107,7 +107,34 @@ export default function SubtitleStudioPage() {
 
     const handleSave = async (segments: SubtitleSegment[], style: SubtitleStyle) => {
         try {
-            // Update localStorage
+            if (!clip) return
+
+            // 1. Call subtitle burn API
+            toast.loading('Altyazılar videoya yazılıyor...', { id: 'subtitle-burn' })
+
+            const response = await fetch('/api/subtitle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    videoPath: clip.videoPath.startsWith('http')
+                        ? clip.videoPath
+                        : clip.videoPath.replace(/^\//, ''), // Remove leading slash for local paths
+                    segments,
+                    style: style.id,
+                    font: style.font,
+                    primaryColor: style.primaryColor
+                })
+            })
+
+            if (!response.ok) {
+                const err = await response.json()
+                throw new Error(err.error || 'Altyazı yazma hatası')
+            }
+
+            const result = await response.json()
+            toast.dismiss('subtitle-burn')
+
+            // 2. Update localStorage with new subtitled video path
             const stored = localStorage.getItem(`kadostudio_editor_${videoId}`)
             if (stored && clipIndex !== -1) {
                 const data: EditorData = JSON.parse(stored)
@@ -121,23 +148,26 @@ export default function SubtitleStudioPage() {
                     clipObj = { url: existingRaw }
                 }
 
-                // Update with subtitle data
+                // Update with subtitle data and new output path
                 clipObj.hasSubtitles = true
                 clipObj.subtitleSegments = segments
                 clipObj.subtitleStyle = style
+                clipObj.subtitledPath = result.outputPath // New video with burned subtitles
+                clipObj.url = result.outputPath // Update main URL to subtitled version
 
                 // Save back
                 data.clips[clipIndex] = JSON.stringify(clipObj)
                 localStorage.setItem(`kadostudio_editor_${videoId}`, JSON.stringify(data))
 
-                toast.success('Altyazılar kaydedildi')
+                toast.success('Altyazılar başarıyla yazıldı!')
 
                 // Navigate back
                 router.push(`/editor/${videoId}`)
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error(e)
-            toast.error('Kaydetme başarısız')
+            toast.dismiss('subtitle-burn')
+            toast.error(e.message || 'Kaydetme başarısız')
         }
     }
 

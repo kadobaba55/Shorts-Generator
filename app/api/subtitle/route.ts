@@ -101,9 +101,15 @@ export async function POST(request: NextRequest) {
         // Ensure directories exist
         ensureDirectories()
 
-        const inputPath = path.join(process.cwd(), 'public', videoPath)
-        if (!fs.existsSync(inputPath)) {
-            return NextResponse.json({ error: 'Video file not found' }, { status: 404 })
+        // Handle Remote URL (R2) vs Local File
+        let inputPath = videoPath
+        const isRemote = videoPath.startsWith('http')
+
+        if (!isRemote) {
+            inputPath = path.join(process.cwd(), 'public', videoPath)
+            if (!fs.existsSync(inputPath)) {
+                return NextResponse.json({ error: 'Video file not found' }, { status: 404 })
+            }
         }
 
         const outputId = Date.now().toString()
