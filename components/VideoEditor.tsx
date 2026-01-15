@@ -280,13 +280,21 @@ export default function VideoEditor({
 
         toast.loading('Rendering clip...', { id: 'render' })
         try {
+            // CRITICAL: When using subtitledPath, set trimStart to 0
+            // The subtitles are burned at positions relative to the FULL padded video
+            // If we apply the original trimStart (paddingStart=15s), we'd skip the first 15s of subtitles!
+            const effectiveTrimStart = selectedClip.subtitledPath ? 0 : (selectedClip.trimStart || 0)
+            const effectiveTrimEnd = selectedClip.subtitledPath
+                ? (selectedClip.duration || 30) // Use full duration for subtitled video
+                : (selectedClip.trimEnd || selectedClip.duration)
+
             const res = await fetch('/api/export', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     videoPath: sourceVideoPath, // Use subtitled video if available
-                    trimStart: selectedClip.trimStart || 0,
-                    trimEnd: selectedClip.trimEnd || selectedClip.duration,
+                    trimStart: effectiveTrimStart,
+                    trimEnd: effectiveTrimEnd,
                     aspectRatio,
                     transform
                 })
