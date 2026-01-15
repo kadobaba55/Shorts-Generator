@@ -177,22 +177,38 @@ export async function POST(request: NextRequest) {
             return `&H${b}${g}${r}&`
         }
 
-        // Build custom style from frontend parameters
-        const primaryColorAss = hexToAss(primaryColor)
-        const customStyle = `FontName=${font},FontSize=32,PrimaryColour=${primaryColorAss},OutlineColour=&H000000&,Outline=4,Shadow=3,Bold=1,Alignment=2,MarginV=60`
+        // Import presets to get full style info
+        const { SUBTITLE_PRESETS } = await import('@/lib/subtitlePresets')
+        const preset = SUBTITLE_PRESETS.find(p => p.id === style)
 
-        // Fallback to preset styles
-        const styles: { [key: string]: string } = {
-            'classic': 'FontName=Impact,FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,Outline=3,Shadow=2,Bold=1,Alignment=2,MarginV=50',
-            'neon': 'FontName=Arial Black,FontSize=30,PrimaryColour=&HFF00FF&,SecondaryColour=&HFFFF00&,OutlineColour=&H000000&,Outline=4,Shadow=0,Bold=1,Alignment=2,MarginV=50',
-            'box': 'FontName=Roboto,FontSize=26,PrimaryColour=&HFFFFFF&,BackColour=&H80000000&,Outline=0,Shadow=0,BorderStyle=4,Bold=1,Alignment=2,MarginV=50',
-            'viral': customStyle,  // Use custom style for viral
-            'minimal': 'FontName=Arial,FontSize=24,PrimaryColour=&HFFFFFF&,OutlineColour=&H404040&,Outline=2,Shadow=1,Alignment=2,MarginV=40',
-            'karaoke': 'FontName=Comic Sans MS,FontSize=28,PrimaryColour=&H00D7FF&,OutlineColour=&H000000&,Outline=3,Shadow=2,Bold=1,Alignment=2,MarginV=50'
+        // Build ASS style from preset or custom parameters
+        const buildAssStyle = () => {
+            const fontName = font || preset?.font || 'Impact'
+            const fontSize = preset?.fontSize || 32
+            const color = hexToAss(primaryColor || preset?.primaryColor || '#00FFFF')
+            const outlineColor = hexToAss(preset?.outlineColor || '#000000')
+
+            // Determine if italic should be applied (some presets may use it)
+            const italic = 1 // Enable italic for more stylish look matching preview
+            const bold = 1
+
+            // Shadow settings
+            const shadow = preset?.shadowEnabled ? Math.ceil(preset.shadowBlur / 2) : 3
+            const outline = 3
+
+            // Background box style (BorderStyle=4 with BackColour)
+            let bgStyle = ''
+            if (preset?.bgEnabled && preset.bgOpacity > 0) {
+                // Convert opacity to hex alpha (00-FF, inverted for ASS)
+                const alpha = Math.round((1 - preset.bgOpacity) * 255).toString(16).padStart(2, '0').toUpperCase()
+                const bgColor = hexToAss(preset.bgColor || '#000000').replace('&H', `&H${alpha}`)
+                bgStyle = `,BorderStyle=4,BackColour=${bgColor}`
+            }
+
+            return `FontName=${fontName},FontSize=${fontSize},PrimaryColour=${color},OutlineColour=${outlineColor},Outline=${outline},Shadow=${shadow},Bold=${bold},Italic=${italic},Alignment=2,MarginV=60${bgStyle}`
         }
 
-        // If custom font/color provided, always use custom style
-        const subtitleStyle = (font !== 'Impact' || primaryColor !== '#00FFFF') ? customStyle : (styles[style] || styles['viral'])
+        const subtitleStyle = buildAssStyle()
 
         // Check for user session to improved Guest Mode logic
         const { getServerSession } = await import("next-auth")
