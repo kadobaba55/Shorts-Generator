@@ -253,21 +253,37 @@ export default function VideoEditor({
         // @ts-ignore
         if (status === "unauthenticated" || !session?.user) {
             toast.error("Video indirmek için giriş yapmalısınız!")
-            // Save current state if needed? For now just redirect.
-            // Ideally we save the project to localStorage so they can resume.
-            // But they are already working on local state.
             router.push('/login?callbackUrl=' + encodeURIComponent(window.location.pathname) + '&reason=guest_save')
             return
         }
 
         if (!selectedClip) return
+
+        // Use subtitledPath if available, otherwise use videoPath
+        const sourceVideoPath = selectedClip.subtitledPath || selectedClip.videoPath
+
+        // If subtitled video exists and no transform/crop is needed, directly download
+        const noTransformNeeded = transform.scale === 1 && transform.x === 0 && transform.y === 0
+        const noTrimNeeded = (selectedClip.trimStart === 0 || !selectedClip.trimStart) &&
+            (!selectedClip.trimEnd || selectedClip.trimEnd >= selectedClip.duration)
+
+        if (selectedClip.subtitledPath && noTransformNeeded && noTrimNeeded) {
+            // Direct download - no need to re-render
+            toast.success('Video indiriliyor...', { id: 'render' })
+            const link = document.createElement('a')
+            link.href = selectedClip.subtitledPath
+            link.download = `clip_${selectedClipIndex + 1}_subtitled.mp4`
+            link.click()
+            return
+        }
+
         toast.loading('Rendering clip...', { id: 'render' })
         try {
             const res = await fetch('/api/export', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    videoPath: selectedClip.videoPath,
+                    videoPath: sourceVideoPath, // Use subtitled video if available
                     trimStart: selectedClip.trimStart || 0,
                     trimEnd: selectedClip.trimEnd || selectedClip.duration,
                     aspectRatio,

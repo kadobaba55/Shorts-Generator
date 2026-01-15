@@ -50,17 +50,19 @@ async function transcribeWithDeepgram(jobId: string, audioPath: string, language
     const words = alternative.words || []
 
     // --- SMART SEGMENTATION FOR SHORTS ---
-    // Instead of using big paragraphs, we chunk words into small groups.
-    // Goal: 1-5 words per segment, max 2 seconds duration if possible, optimal for reading.
+    // Goal: 2-5 words per segment, natural breaks at pauses, optimal for reading
+    // Each segment extends until the next one starts (seamless transition)
 
     let segments: any[] = []
     let currentSegment: { start: number, end: number, text: string, words: any[] } | null = null
     let segmentIndex = 1
 
-    const MAX_WORDS_PER_SEGMENT = 4
-    const MAX_CHARS_PER_SEGMENT = 35 // Max characters per line approx
+    const MAX_WORDS_PER_SEGMENT = 5
+    const MAX_CHARS_PER_SEGMENT = 40
+    const PAUSE_THRESHOLD = 0.4 // seconds - break on pauses longer than this
 
-    for (const wordObj of words) {
+    for (let i = 0; i < words.length; i++) {
+        const wordObj = words[i]
         const word = wordObj.word
         const start = wordObj.start
         const end = wordObj.end
@@ -70,21 +72,29 @@ async function transcribeWithDeepgram(jobId: string, audioPath: string, language
             continue
         }
 
+        // Check for pause/silence (gap between words)
+        const lastWord = currentSegment.words[currentSegment.words.length - 1]
+        const gap = start - lastWord.end
+        const isPause = gap > PAUSE_THRESHOLD
+
         // Check limits
         const newText = currentSegment.text + " " + word
         const wordCount = currentSegment.words.length + 1
-        // const duration = end - currentSegment.start
 
         // Break if:
         // 1. Too many words
         // 2. Too many characters
-        // 3. (Optional) Pause/Silence detection could happen here based on time gap vs previous word
-        if (wordCount > MAX_WORDS_PER_SEGMENT || newText.length > MAX_CHARS_PER_SEGMENT) {
-            // Push old segment
+        // 3. Natural pause detected
+        const shouldBreak = wordCount > MAX_WORDS_PER_SEGMENT ||
+            newText.length > MAX_CHARS_PER_SEGMENT ||
+            isPause
+
+        if (shouldBreak) {
+            // Push old segment - extend end to current word's start for seamless transition
             segments.push({
                 id: segmentIndex++,
                 start: currentSegment.start,
-                end: currentSegment.end,
+                end: start - 0.01, // End just before next word starts
                 text: currentSegment.text
             })
             // Start new
@@ -102,7 +112,7 @@ async function transcribeWithDeepgram(jobId: string, audioPath: string, language
         segments.push({
             id: segmentIndex++,
             start: currentSegment.start,
-            end: currentSegment.end,
+            end: currentSegment.end + 0.5, // Extend last segment a bit for visibility
             text: currentSegment.text
         })
     }

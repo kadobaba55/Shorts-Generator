@@ -116,20 +116,40 @@ export async function POST(request: NextRequest) {
         const srtPath = path.join(TEMP_DIR, `${outputId}.srt`)
         const outputPath = path.join(OUTPUT_DIR, `${outputId}_subtitled.mp4`)
 
-        // Step 1: Generate SRT file from JSON segments
-        console.log(`Generating SRT with ${segments.length} segments...`)
+        // Step 1: Sort segments by start time and fix overlapping times
+        const sortedSegments = [...segments].sort((a: any, b: any) => a.start - b.start)
+
+        // Fix overlapping segments - ensure each segment ends before next one starts
+        for (let i = 0; i < sortedSegments.length - 1; i++) {
+            const current = sortedSegments[i]
+            const next = sortedSegments[i + 1]
+
+            // If current segment's end time overlaps with next segment's start time
+            if (current.end >= next.start) {
+                // Set current end to slightly before next start (50ms gap)
+                current.end = Math.max(current.start + 0.1, next.start - 0.05)
+            }
+        }
+
+        // Step 2: Generate SRT file from fixed segments
+        console.log(`Generating SRT with ${sortedSegments.length} segments...`)
         let srtContent = ''
 
-        segments.forEach((seg: any, index: number) => {
+        sortedSegments.forEach((seg: any, index: number) => {
             let text = seg.text
 
-            // Apply text processing if requested (could be done in frontend, but here is safe too)
+            // Apply text processing if requested
             if (addEmojis) text = addEmojisToText(text)
             if (highlightKeywords) text = highlightKeywordsInText(text)
 
             srtContent += `${index + 1}\n`
             srtContent += `${secondsToSrtTime(seg.start)} --> ${secondsToSrtTime(seg.end)}\n`
             srtContent += `${text}\n\n`
+
+            // Debug log first few segments
+            if (index < 5) {
+                console.log(`Segment ${index + 1}: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s: "${text}"`)
+            }
         })
 
         fs.writeFileSync(srtPath, srtContent, 'utf-8')
