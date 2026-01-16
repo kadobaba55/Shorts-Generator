@@ -20,22 +20,27 @@ const CONCURRENCY_LIMITS: Record<Job['type'], number> = {
     subtitle: 2,      // 2 Whisper at a time (CPU/RAM balanced for e2-medium)
 }
 
-// Global job store
+// Global job store - MUST persist across requests in ALL environments
 const globalForJobs = global as unknown as {
     jobs: Map<string, Job>
     activeJobs: Map<Job['type'], Set<string>>
     waitingQueue: Map<Job['type'], string[]>
 }
 
-export const jobs = globalForJobs.jobs || new Map<string, Job>()
-const activeJobs = globalForJobs.activeJobs || new Map<Job['type'], Set<string>>()
-const waitingQueue = globalForJobs.waitingQueue || new Map<Job['type'], string[]>()
-
-if (process.env.NODE_ENV !== 'production') {
-    globalForJobs.jobs = jobs
-    globalForJobs.activeJobs = activeJobs
-    globalForJobs.waitingQueue = waitingQueue
+// Initialize if not exists - ALWAYS assign to global (not just dev mode)
+if (!globalForJobs.jobs) {
+    globalForJobs.jobs = new Map<string, Job>()
 }
+if (!globalForJobs.activeJobs) {
+    globalForJobs.activeJobs = new Map<Job['type'], Set<string>>()
+}
+if (!globalForJobs.waitingQueue) {
+    globalForJobs.waitingQueue = new Map<Job['type'], string[]>()
+}
+
+export const jobs = globalForJobs.jobs
+const activeJobs = globalForJobs.activeJobs
+const waitingQueue = globalForJobs.waitingQueue
 
 // Initialize sets for each job type
 for (const type of ['download', 'process', 'analyze', 'subtitle'] as Job['type'][]) {
