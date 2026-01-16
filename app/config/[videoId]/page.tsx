@@ -50,6 +50,7 @@ export default function ConfigPage() {
     // Processing State
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [analyzeETA, setAnalyzeETA] = useState('')
+    const [statusMessage, setStatusMessage] = useState('')
 
     // Load video data from localStorage
     useEffect(() => {
@@ -186,11 +187,13 @@ export default function ConfigPage() {
                         console.log(`[Poll] ❌ ${type} error:`, job.error)
                         clearInterval(interval)
                         reject(new Error(job.error || `${type} failed`))
-                    } else if (job.progress) {
-                        // Update ETA based on progress
-                        const elapsed = (Date.now() - Date.now()) / 1000
+                    } else {
+                        // Update status message and progress
+                        if (job.message) {
+                            setStatusMessage(job.message)
+                        }
                         if (job.progress > 0) {
-                            const remaining = (elapsed / job.progress) * (100 - job.progress)
+                            const remaining = ((100 - job.progress) / job.progress) * 2 // rough estimate
                             setAnalyzeETA(formatTimeRemaining(remaining))
                         }
                     }
@@ -276,6 +279,7 @@ export default function ConfigPage() {
                     onBack={handleBack}
                     isAnalyzing={isAnalyzing}
                     estimatedTimeRemaining={analyzeETA}
+                    statusMessage={statusMessage}
                 />
             </div>
         </main>

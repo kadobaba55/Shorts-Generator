@@ -21,6 +21,7 @@ interface ConfigStepProps {
     onBack: () => void
     isAnalyzing: boolean
     estimatedTimeRemaining?: string
+    statusMessage?: string
 }
 
 export default function ConfigStep({
@@ -40,7 +41,8 @@ export default function ConfigStep({
     onSubmit,
     onBack,
     isAnalyzing,
-    estimatedTimeRemaining
+    estimatedTimeRemaining,
+    statusMessage
 }: ConfigStepProps) {
     const { t } = useLanguage()
 
@@ -301,6 +303,15 @@ export default function ConfigStep({
                                     ))
                                 )}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Status Message Display */}
+                    {isAnalyzing && statusMessage && (
+                        <div className="border border-neon-amber/50 bg-neon-amber/10 p-3 rounded animate-fade-in">
+                            <p className="font-mono text-xs text-neon-amber text-center">
+                                {statusMessage}
+                            </p>
                         </div>
                     )}
 
