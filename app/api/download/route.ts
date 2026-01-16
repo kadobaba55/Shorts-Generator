@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'URL gerekli' }, { status: 400 })
         }
 
-        // Validate YouTube URL
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/)|youtu\.be\/)[\w-]+/
+        // Validate YouTube URL - support watch, embed, shorts, live, and youtu.be formats
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/|live\/|playlist\?)|youtu\.be\/)[\w-]+/
         if (!youtubeRegex.test(url)) {
             return NextResponse.json({ error: 'Geçersiz YouTube URL' }, { status: 400 })
         }
