@@ -251,6 +251,7 @@ export async function POST(request: NextRequest) {
                         message: `${clips.length} klip başarıyla işlendi`
                     }
                 })
+                console.log(`✅ Process job ${job.id} completed successfully with ${processedClips.length} clips`)
 
             } catch (error: any) {
                 console.error('Processing job error:', error)

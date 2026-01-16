@@ -162,14 +162,20 @@ export default function ConfigPage() {
     // Poll for job completion
     const pollForCompletion = (jobId: string, type: string): Promise<any> => {
         return new Promise((resolve, reject) => {
+            console.log(`[Poll] Starting polling for ${type} job: ${jobId}`)
             const interval = setInterval(async () => {
                 try {
                     const res = await fetch(`/api/status?id=${jobId}`)
-                    if (!res.ok) return
+                    if (!res.ok) {
+                        console.log(`[Poll] Status API returned ${res.status}`)
+                        return
+                    }
 
                     const job = await res.json()
+                    console.log(`[Poll] ${type} Job Status:`, job.status, job.progress || '')
 
                     if (job.status === 'completed') {
+                        console.log(`[Poll] ✅ ${type} completed!`, job.result)
                         clearInterval(interval)
                         if (type === 'analysis') {
                             resolve(job.result?.clips || [])
@@ -177,6 +183,7 @@ export default function ConfigPage() {
                             resolve(job.result || {})
                         }
                     } else if (job.status === 'error') {
+                        console.log(`[Poll] ❌ ${type} error:`, job.error)
                         clearInterval(interval)
                         reject(new Error(job.error || `${type} failed`))
                     } else if (job.progress) {
