@@ -146,7 +146,10 @@ export async function POST(request: NextRequest) {
                 // Fallback to audio analysis if no heatmap clips found
                 if (selectedClips.length === 0) {
                     analysisMethod = 'audio'
-                    updateJob(job.id, { message: 'Ses analizi yapılıyor (Bu biraz sürebilir)...' })
+                    updateJob(job.id, {
+                        message: '⚠️ Heatmap verisi bulunamadı. Ses analizi yapılıyor (bu işlem uzun sürebilir)...',
+                        progress: 0
+                    })
 
                     // Get overall volume stats
                     const analyzeCmd = `ffmpeg -i "${inputPath}" -af "volumedetect" -vn -sn -dn -f null - 2>&1`

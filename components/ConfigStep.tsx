@@ -167,7 +167,29 @@ export default function ConfigStep({
                         </div>
                     </div>
 
-                    {/* Auto Mode Settings */}
+                    {/* Manual Mode Tip - Only show when AI mode is selected */}
+                    {mode === 'auto' && (
+                        <div className="border border-neon-amber/30 bg-neon-amber/5 p-3 rounded animate-fade-in">
+                            <div className="flex items-start gap-2">
+                                <span className="text-neon-amber">💡</span>
+                                <div className="flex-1">
+                                    <p className="font-mono text-xs text-neon-amber/90">
+                                        Hızlı işlem için{' '}
+                                        <button
+                                            onClick={() => setMode('manual')}
+                                            className="underline hover:text-neon-green transition-colors font-bold"
+                                        >
+                                            Manuel Mod
+                                        </button>
+                                        'u kullanabilirsiniz.
+                                    </p>
+                                    <p className="font-mono text-[10px] text-gray-500 mt-1">
+                                        AI analizi bazı videolarda uzun sürebilir.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {mode === 'auto' && (
                         <div className="border border-neon-green/30 p-3 md:p-4 bg-bg-card space-y-4 animate-fade-in">
                             <div className="font-mono text-xs text-neon-green mb-2">
