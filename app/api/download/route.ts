@@ -143,17 +143,33 @@ export async function POST(req: NextRequest) {
                 })
 
                 child.on('close', async (code) => {
+                    console.log(`yt-dlp process closed with code: ${code}`)
+
                     if (code === 0) {
                         try {
-                            const { uploadFileToR2, deleteFileFromR2 } = require('@/lib/storage')
-                            updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️' })
+                            // Verify downloaded file exists
+                            if (!fs.existsSync(outputPath)) {
+                                throw new Error(`Downloaded file not found at: ${outputPath}`)
+                            }
+                            const fileSize = fs.statSync(outputPath).size
+                            console.log(`✅ Download complete. File: ${outputPath}, Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
+
+                            const { uploadFileToR2 } = require('@/lib/storage')
+                            updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️', progress: 95 })
+                            console.log('Starting R2 upload...')
 
                             // Upload to R2
                             const r2Key = `uploads/${videoId}.mp4`
                             const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
+                            console.log('✅ R2 upload complete:', publicUrl)
 
                             // Delete local file
-                            fs.unlinkSync(outputPath)
+                            try {
+                                fs.unlinkSync(outputPath)
+                                console.log('Local file deleted')
+                            } catch (delErr) {
+                                console.warn('Could not delete local file:', delErr)
+                            }
 
                             // Complete Job with Public URL
                             completeJob(job.id, 'download')
@@ -163,23 +179,21 @@ export async function POST(req: NextRequest) {
                                 progress: 100,
                                 result: {
                                     videoId,
-                                    videoPath: publicUrl, // Now returns the remote URL
+                                    videoPath: publicUrl,
                                     title: videoInfo.title,
                                     duration: videoInfo.duration,
                                     thumbnail: videoInfo.thumbnail
                                 }
                             })
+                            console.log('✅ Download job completed successfully')
                         } catch (uploadError: any) {
-                            console.error('R2 Upload Failed:', uploadError)
-                            // If upload fails, maybe keep local file or fail job?
-                            // Let's fail job for now to ensure consistency
+                            console.error('❌ R2 Upload Failed:', uploadError)
                             completeJob(job.id, 'download')
                             updateJob(job.id, { status: 'error', error: `R2 Yükleme Hatası: ${uploadError.message}` })
                         }
                     } else {
-                        // ... existing error logic ...
+                        console.error(`❌ yt-dlp failed with code ${code}`)
                         completeJob(job.id, 'download')
-                        console.error('Download failed with code', code)
                         console.error('Error output:', errorOutput)
 
                         let failReason = 'Bilinmeyen hata'
