@@ -117,8 +117,28 @@ export async function POST(request: NextRequest) {
         // Handle Remote URL (R2) vs Local File
         let inputPath = videoPath
         const isRemote = videoPath.startsWith('http')
+        let tempInputFile: string | null = null
 
-        if (!isRemote) {
+        if (isRemote) {
+            // Download remote video first - streaming is too slow for FFmpeg
+            console.log('Downloading remote video for processing...')
+            const tempFileName = `temp_input_${Date.now()}.mp4`
+            tempInputFile = path.join(TEMP_DIR, tempFileName)
+
+            try {
+                const response = await fetch(videoPath)
+                if (!response.ok) {
+                    throw new Error(`Failed to download video: ${response.status}`)
+                }
+                const buffer = await response.arrayBuffer()
+                fs.writeFileSync(tempInputFile, Buffer.from(buffer))
+                inputPath = tempInputFile
+                console.log('Video downloaded to:', tempInputFile)
+            } catch (downloadError: any) {
+                console.error('Video download failed:', downloadError)
+                return NextResponse.json({ error: 'Video indirilemedi: ' + downloadError.message }, { status: 500 })
+            }
+        } else {
             inputPath = path.join(process.cwd(), 'public', videoPath)
             if (!fs.existsSync(inputPath)) {
                 return NextResponse.json({ error: 'Video file not found' }, { status: 404 })
@@ -239,8 +259,12 @@ export async function POST(request: NextRequest) {
         console.log('Burning subtitles...')
         await execAsync(burnSubsCmd, { timeout: 300000 }) // 5 min timeout
 
-        // Cleanup SRT file
+        // Cleanup temporary files
         try { fs.unlinkSync(srtPath) } catch (e) { }
+        if (tempInputFile) {
+            try { fs.unlinkSync(tempInputFile) } catch (e) { }
+            console.log('Temp input file cleaned up')
+        }
 
         // Upload subtitled video to R2 for consistent access
         console.log('Uploading subtitled video to storage...')
