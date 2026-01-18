@@ -1,0 +1,7 @@
+# Netscape HTTP Cookie File
+# This is a generated file!  Do not edit.
+
+# Paste your YouTube cookies here.
+# You can get them using a browser extension like "Get cookies.txt LOCALLY"
+# Go to YouTube, make sure you are logged in, click the extension, and export.
+# Then delete this content and paste the exported text here.
