@@ -86,39 +86,13 @@ export async function POST(request: NextRequest) {
                 // Try to get YouTube heatmap data if URL is provided
                 if (youtubeUrl) {
                     try {
-                        updateJob(job.id, { message: 'YouTube verileri inceleniyor...' })
-                        const cookiePath = path.join(process.cwd(), 'cookies.txt')
+                        updateJob(job.id, { message: 'YouTube verileri inceleniyor (OAuth2)...' })
 
-                        // Strategy 1: Try with iOS client (often best for bypass)
+                        // Use OAuth2 authentication
                         const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+                        const cmd = `python3 -m yt_dlp --dump-json "${youtubeUrl}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=ios" --username oauth2 --password ""`
 
-                        // Helper to run command
-                        const runYtDlp = async (useCookies: boolean) => {
-                            let cmd = `python3 -m yt_dlp --dump-json "${youtubeUrl}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=ios"`
-                            if (useCookies && fs.existsSync(cookiePath)) {
-                                cmd += ` --cookies "${cookiePath}"`
-                            }
-                            return execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 })
-                        }
-
-                        let videoJson = ''
-                        try {
-                            // Attempt 1: With cookies (if exist)
-                            const res = await runYtDlp(true)
-                            videoJson = res.stdout
-                        } catch (e: any) {
-                            const errStr = e.stderr || e.message
-                            // If error is "Sign in" or "cookies", try again WITHOUT cookies
-                            if (errStr.includes('Sign in') || errStr.includes('cookies')) {
-                                console.log('Retrying without cookies...')
-                                updateJob(job.id, { message: 'Çerezsiz deneniyor...' })
-                                const res = await runYtDlp(false)
-                                videoJson = res.stdout
-                            } else {
-                                throw e
-                            }
-                        }
-
+                        const { stdout: videoJson } = await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 })
                         const videoData = JSON.parse(videoJson)
 
                         // Check for heatmap data
