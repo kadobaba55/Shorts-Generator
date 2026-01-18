@@ -1,7 +1,25 @@
 # Netscape HTTP Cookie File
-# This is a generated file!  Do not edit.
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
 
-# Paste your YouTube cookies here.
-# You can get them using a browser extension like "Get cookies.txt LOCALLY"
-# Go to YouTube, make sure you are logged in, click the extension, and export.
-# Then delete this content and paste the exported text here.
+.youtube.com	TRUE	/	TRUE	1768762148	GPS	1
+.youtube.com	TRUE	/	TRUE	1800296393	__Secure-1PSIDTS	sidts-CjUB7I_69NCQj49RP0j6B5nMqWqNQ3TTqgJXPHGaRfqn4ABMy575iWGG_zPzNrKrVX3w4bbBKxAA
+.youtube.com	TRUE	/	TRUE	1800296393	__Secure-3PSIDTS	sidts-CjUB7I_69NCQj49RP0j6B5nMqWqNQ3TTqgJXPHGaRfqn4ABMy575iWGG_zPzNrKrVX3w4bbBKxAA
+.youtube.com	TRUE	/	FALSE	1803320393	HSID	A--g3wkXdMKHBTkGy
+.youtube.com	TRUE	/	TRUE	1803320393	SSID	Ao12F8U8qXfKfueyg
+.youtube.com	TRUE	/	FALSE	1803320393	APISID	I9uxmCQsjSDohJBo/AKKwKfZeLFtQIuZTK
+.youtube.com	TRUE	/	TRUE	1803320393	SAPISID	xt3ZchPTGNvObJIm/ADFTHOyYQ79GIHyKt
+.youtube.com	TRUE	/	TRUE	1803320393	__Secure-1PAPISID	xt3ZchPTGNvObJIm/ADFTHOyYQ79GIHyKt
+.youtube.com	TRUE	/	TRUE	1803320393	__Secure-3PAPISID	xt3ZchPTGNvObJIm/ADFTHOyYQ79GIHyKt
+.youtube.com	TRUE	/	FALSE	1803320393	SID	g.a0005wjl94NzLmWypqonHCV_Dj8aJ3Si0TuIlIPGQjPd5oI_zaMVSDlYAFWQebgI4pZzTa1Y3AACgYKAeMSARMSFQHGX2MimT913PkyUcLldbpNcDVH-xoVAUF8yKpLxJ4LhUfcn8d5XDihaurk0076
+.youtube.com	TRUE	/	TRUE	1803320393	__Secure-1PSID	g.a0005wjl94NzLmWypqonHCV_Dj8aJ3Si0TuIlIPGQjPd5oI_zaMVbEKSOJ4_02spdUSqm4oA3QACgYKAaASARMSFQHGX2MiszjsZ_8VaEGmEGUhXF33MhoVAUF8yKpgsls-VXk7W-b7UIHspjN_0076
+.youtube.com	TRUE	/	TRUE	1803320393	__Secure-3PSID	g.a0005wjl94NzLmWypqonHCV_Dj8aJ3Si0TuIlIPGQjPd5oI_zaMVElKVNFDgcDilPhXJScKNogACgYKAagSARMSFQHGX2MiuJwQrNdoMRmzxJQtBz07IxoVAUF8yKrqHhrc9hlTvlCzyasX5VBm0076
+.youtube.com	TRUE	/	TRUE	1803320399	LOGIN_INFO	AFmmF2swRQIhAIhCYONmPA0t_4FEwSpn3PQ_7YhjUEOQApUaiF5q1GlzAiAFIcCQ6WROKi58V00i9qnS1FdbxJ-YVVVYQ1tcJefM0A:QUQ3MjNmd0N0NlZWSklpRXdJaWtpeVlnLWR2SHdPSGtUMmNJQkluWTRuT0VTWGNKdVZTQ3Zpb211TVMtTWpvY2pRTXlhUHVZVm5YZEdZd3gxX2N2d1lqNkQ3THN5dGV5QXVNQTFQaTYxNnpIeXZhVVNFUV9xNk83SDZNWEtPSmtPS1JlTkRxRUh5UEk1SU9DWHUxUEtkYzBlVkpOZkF5V3dn
+.youtube.com	TRUE	/	TRUE	1803320411	PREF	f6=40000080&tz=Europe.Istanbul&f4=4000000&f7=100
+.youtube.com	TRUE	/	FALSE	1800296411	SIDCC	AKEyXzXbT4oMFeShBdqLgwRmIyJ4NGmEoxKf6xjmRVxANNOZimMs8_a-ON2ufiIXZm29NBg9hQ
+.youtube.com	TRUE	/	TRUE	1800296411	__Secure-1PSIDCC	AKEyXzXHZBYH5gXmKGxebVdTKwOjkZtarA2jF6ZAB4B04sAtkauy1LQpVTqSJCUdmGxyyf0X
+.youtube.com	TRUE	/	TRUE	1800296411	__Secure-3PSIDCC	AKEyXzWqy9BF4lxyiZiLzHcS8jp9NVezZ5MICegpWFro5RJhGJygd-YjWgwODyjHJcysssDuJQ
+.youtube.com	TRUE	/	TRUE	0	YSC	06e57TWLq6o
+.youtube.com	TRUE	/	TRUE	1784312404	VISITOR_INFO1_LIVE	OiXvE9BqNmQ
+.youtube.com	TRUE	/	TRUE	1784312404	VISITOR_PRIVACY_METADATA	CgJUUhIEGgAgGA%3D%3D
+.youtube.com	TRUE	/	TRUE	1784312349	__Secure-ROLLOUT_TOKEN	CPaOmuH12f3r2gEQkcH14dmVkgMYr_ay4tmVkgM%3D
