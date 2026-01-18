@@ -7,22 +7,21 @@ import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useEditor } from './EditorContext'
 import { motion } from 'framer-motion'
+import SubtitleInspector from './SubtitleInspector'
 
 // --- Sub-Components ---
 
 const Sidebar = () => {
-    const { clips, selectedClipId, setSelectedClipId } = useEditor()
+    const { clips, selectedClipId, setSelectedClipId, addSubtitleSegment, currentTime } = useEditor()
     const selectedClip = clips.find(c => c.id === selectedClipId)
-
-    const router = useRouter()
-    const pathname = usePathname()
 
     const handleEditSubtitle = () => {
         if (selectedClip) {
             // Navigate to existing subtitle page
             // Path structure: /editor/[videoId]/subtitle/[clipId]
             // We are at /editor/[videoId]
-            router.push(`${pathname}/subtitle/${selectedClip.id}`)
+            // This functionality is now handled by the SubtitleInspector directly.
+            // This handler is no longer needed.
         }
     }
 
@@ -86,12 +85,7 @@ const Sidebar = () => {
                             <div className="space-y-2 pt-2 border-t border-gray-800">
                                 <div className="flex items-center justify-between">
                                     <div className="text-[10px] text-neon-amber">&gt; SUBTITLES</div>
-                                    <button
-                                        onClick={handleEditSubtitle}
-                                        className="text-[10px] bg-neon-amber/10 text-neon-amber px-2 py-0.5 rounded border border-neon-amber/30 hover:bg-neon-amber/20"
-                                    >
-                                        EDIT
-                                    </button>
+                                    <div className="text-[10px] text-gray-500 italic">Inspect on right &rarr;</div>
                                 </div>
                                 <div className="p-2 bg-black/40 rounded border border-gray-800 text-[10px] text-gray-400">
                                     {selectedClip.subtitleSegments?.length || 0} segments
@@ -101,7 +95,7 @@ const Sidebar = () => {
                             <div className="space-y-2 pt-2 border-t border-gray-800">
                                 <div className="text-[10px] text-neon-amber">&gt; SUBTITLES</div>
                                 <button
-                                    onClick={handleEditSubtitle}
+                                    onClick={() => selectedClip && addSubtitleSegment(selectedClip.id, currentTime)}
                                     className="w-full text-xs bg-neon-green/20 text-neon-green border border-neon-green/50 py-2 rounded hover:bg-neon-green/30 flex items-center justify-center gap-2"
                                 >
                                     <span>+</span> ADD SUBTITLES
@@ -330,6 +324,11 @@ export default function StudioLayout() {
                     <div className="h-64 shrink-0 z-30 relative">
                         <Timeline />
                     </div>
+                </div>
+
+                {/* Right Panel (Inspector) */}
+                <div className="w-80 shrink-0 border-l border-neon-green/30 bg-bg-card z-30 relative hidden lg:block overflow-hidden">
+                    <SubtitleInspector />
                 </div>
             </div>
         </div>

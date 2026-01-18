@@ -44,6 +44,12 @@ interface EditorContextType {
     selectedClipId: string | null
     setSelectedClipId: (id: string | null) => void
 
+    // Subtitle Actions
+    updateSubtitleSegment: (clipId: string, segmentIndex: number, updates: any) => void
+    addSubtitleSegment: (clipId: string, start: number) => void
+    removeSubtitleSegment: (clipId: string, segmentIndex: number) => void
+    updateSubtitleStyle: (clipId: string, style: any) => void
+
     // Refs
     videoRef: React.RefObject<HTMLVideoElement>
 }
@@ -63,6 +69,44 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     const updateClip = useCallback((id: string, updates: Partial<EditorClip>) => {
         setClips(prev => prev.map(clip =>
             clip.id === id ? { ...clip, ...updates } : clip
+        ))
+    }, [])
+
+    const updateSubtitleSegment = useCallback((clipId: string, segmentIndex: number, updates: any) => {
+        setClips(prev => prev.map(clip => {
+            if (clip.id !== clipId || !clip.subtitleSegments) return clip
+            const newSegments = [...clip.subtitleSegments]
+            newSegments[segmentIndex] = { ...newSegments[segmentIndex], ...updates }
+            return { ...clip, subtitleSegments: newSegments }
+        }))
+    }, [])
+
+    const addSubtitleSegment = useCallback((clipId: string, start: number) => {
+        setClips(prev => prev.map(clip => {
+            if (clip.id !== clipId) return clip
+            const newSegment = {
+                id: Date.now().toString(),
+                start: start,
+                end: start + 2.0,
+                text: 'New Subtitle'
+            }
+            // Insert sorted? For now just append and user can sort or we sort render
+            const segments = [...(clip.subtitleSegments || []), newSegment].sort((a, b) => a.start - b.start)
+            return { ...clip, subtitleSegments: segments, hasSubtitles: true }
+        }))
+    }, [])
+
+    const removeSubtitleSegment = useCallback((clipId: string, segmentIndex: number) => {
+        setClips(prev => prev.map(clip => {
+            if (clip.id !== clipId || !clip.subtitleSegments) return clip
+            const newSegments = clip.subtitleSegments.filter((_, i) => i !== segmentIndex)
+            return { ...clip, subtitleSegments: newSegments, hasSubtitles: newSegments.length > 0 }
+        }))
+    }, [])
+
+    const updateSubtitleStyle = useCallback((clipId: string, style: any) => {
+        setClips(prev => prev.map(clip =>
+            clip.id === clipId ? { ...clip, subtitleStyle: { ...(clip.subtitleStyle || {}), ...style } } : clip
         ))
     }, [])
 
@@ -133,7 +177,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
             seekTo,
             selectedClipId,
             setSelectedClipId,
-            videoRef
+            videoRef,
+            updateSubtitleSegment,
+            addSubtitleSegment,
+            removeSubtitleSegment,
+            updateSubtitleStyle
         }}>
             {children}
         </EditorContext.Provider>
