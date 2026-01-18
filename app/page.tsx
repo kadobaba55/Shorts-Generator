@@ -9,10 +9,14 @@ import { toast } from 'react-hot-toast'
 import Hero from '@/components/Hero'
 import { formatTimeRemaining } from '@/lib/estimateTime'
 import { useLanguage } from '@/components/LanguageProvider'
-
-import { SplineScene } from '@/components/ui/SplineScene'
 import { useDevicePerformance } from '@/lib/useDevicePerformance'
 import { motion } from 'framer-motion'
+import dynamic from 'next/dynamic'
+
+// Dynamically import SplineScene with SSR disabled to prevent build errors
+const SplineScene = dynamic(() => import('@/components/ui/SplineScene').then(mod => mod.SplineScene), {
+    ssr: false,
+})
 
 export default function Home() {
     const { data: session } = useSession()
