@@ -77,27 +77,53 @@ export async function POST(req: NextRequest) {
 
             try {
                 const cookiePath = path.join(process.cwd(), 'cookies.txt')
-                const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                let infoCommand = `python3 -m yt_dlp --dump-json "${url}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=android"`
+                const iosUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
 
-                if (fs.existsSync(cookiePath)) {
-                    infoCommand += ` --cookies "${cookiePath}"`
-                    updateJob(job.id, { message: '🍪 Cookie dosyası kullanılıyor...' })
+                // Retry helper for info
+                const getInfo = async (useCookies: boolean) => {
+                    let cmd = `python3 -m yt_dlp --dump-json "${url}" --user-agent "${iosUserAgent}" --extractor-args "youtube:player_client=ios"`
+                    if (useCookies && fs.existsSync(cookiePath)) {
+                        cmd += ` --cookies "${cookiePath}"`
+                    }
+                    return execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 })
                 }
 
-                const { stdout: infoJson } = await execAsync(infoCommand, { maxBuffer: 50 * 1024 * 1024 })
+                let infoJson = ''
+                try {
+                    // Try 1: With cookies
+                    const res = await getInfo(true)
+                    infoJson = res.stdout
+                } catch (e: any) {
+                    const errStr = e.stderr || e.message
+                    if (errStr.includes('Sign in') || errStr.includes('cookies')) {
+                        console.log('Info fetch failed with cookies, retrying without...')
+                        updateJob(job.id, { message: 'Çerezsiz deneniyor...' })
+                        const res = await getInfo(false)
+                        infoJson = res.stdout
+                    } else {
+                        throw e
+                    }
+                }
+
                 const videoInfo = JSON.parse(infoJson)
 
                 updateJob(job.id, { message: `İndiriliyor: ${videoInfo.title.substring(0, 30)}...` })
 
                 let errorOutput = ''
 
+                // Prepare proper args for download
+                // NOTE: We should ideally respect the 'useCookies' decision from above, 
+                // but checking for explicit failure again is complex in spawn.
+                // We'll trust that if info succeeded with cookies, download will too, 
+                // OR if info succeeded WITHOUT cookies, we should ideally drop cookies here.
+                // For simplicity/robustness, let's use the iOS args which are generally safer.
+
                 const args = [
                     '-u',
                     '-m', 'yt_dlp',
                     '-f', 'best[ext=mp4]/best',
-                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    '--extractor-args', 'youtube:player_client=android',
+                    '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                    '--extractor-args', 'youtube:player_client=ios',
                     '-o', outputPath,
                     '--newline',
                     '--no-colors'

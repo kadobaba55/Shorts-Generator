@@ -88,14 +88,37 @@ export async function POST(request: NextRequest) {
                     try {
                         updateJob(job.id, { message: 'YouTube verileri inceleniyor...' })
                         const cookiePath = path.join(process.cwd(), 'cookies.txt')
-                        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                        let heatmapCmd = `python -m yt_dlp --dump-json "${youtubeUrl}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=android"`
 
-                        if (fs.existsSync(cookiePath)) {
-                            heatmapCmd += ` --cookies "${cookiePath}"`
+                        // Strategy 1: Try with iOS client (often best for bypass)
+                        const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+
+                        // Helper to run command
+                        const runYtDlp = async (useCookies: boolean) => {
+                            let cmd = `python3 -m yt_dlp --dump-json "${youtubeUrl}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=ios"`
+                            if (useCookies && fs.existsSync(cookiePath)) {
+                                cmd += ` --cookies "${cookiePath}"`
+                            }
+                            return execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 })
                         }
 
-                        const { stdout: videoJson } = await execAsync(heatmapCmd, { maxBuffer: 50 * 1024 * 1024 })
+                        let videoJson = ''
+                        try {
+                            // Attempt 1: With cookies (if exist)
+                            const res = await runYtDlp(true)
+                            videoJson = res.stdout
+                        } catch (e: any) {
+                            const errStr = e.stderr || e.message
+                            // If error is "Sign in" or "cookies", try again WITHOUT cookies
+                            if (errStr.includes('Sign in') || errStr.includes('cookies')) {
+                                console.log('Retrying without cookies...')
+                                updateJob(job.id, { message: 'Çerezsiz deneniyor...' })
+                                const res = await runYtDlp(false)
+                                videoJson = res.stdout
+                            } else {
+                                throw e
+                            }
+                        }
+
                         const videoData = JSON.parse(videoJson)
 
                         // Check for heatmap data
@@ -140,7 +163,8 @@ export async function POST(request: NextRequest) {
                             heatmapWarning = 'Bu video için izlenme verisi bulunamadı. Ses analizi kullanılıyor.'
                         }
                     } catch (e) {
-                        heatmapWarning = 'YouTube verisi alınamadı. Ses analizi kullanılıyor.'
+                        console.error('Heatmap fetch error:', e)
+                        heatmapWarning = 'YouTube verisi alınamadı (Bot koruması). Ses analizi kullanılıyor.'
                     }
                 }
 
