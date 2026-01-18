@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -29,6 +29,15 @@ export default function Home() {
     const [isDownloading, setIsDownloading] = useState(false)
     const [downloadProgress, setDownloadProgress] = useState(0)
     const [downloadETA, setDownloadETA] = useState('')
+
+    // Performance Optimization: Delay 3D model load
+    const [isModelReady, setIsModelReady] = useState(false)
+
+    useEffect(() => {
+        // Delay 3D load to prioritize main content
+        const timer = setTimeout(() => setIsModelReady(true), 1500)
+        return () => clearTimeout(timer)
+    }, [])
 
     // Download Video and redirect to config page
     const handleDownload = async (videoUrl: string) => {
@@ -136,7 +145,7 @@ export default function Home() {
         <main className="min-h-screen bg-kado-bg text-kado-text relative overflow-hidden">
 
             {/* Background Spline Robot - Global Tracking */}
-            {shouldShow3D && (
+            {shouldShow3D && isModelReady && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
