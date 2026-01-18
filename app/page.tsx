@@ -141,6 +141,13 @@ export default function Home() {
         }
     }
 
+    // Optimization: Force lower pixel ratio for performance
+    const handleSplineLoad = (splineApp: any) => {
+        if (splineApp.setPixelRatio) {
+            splineApp.setPixelRatio(1) // Force 1x resolution instead of Retina/4K
+        }
+    }
+
     return (
         <main className="min-h-screen bg-kado-bg text-kado-text relative overflow-hidden">
 
@@ -155,6 +162,7 @@ export default function Home() {
                     <SplineScene
                         scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
                         className="w-full h-full pointer-events-auto" // Robot captures mouse events
+                        onLoad={handleSplineLoad}
                     />
                 </motion.div>
             )}
