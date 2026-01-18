@@ -1,225 +1,129 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { useSession } from 'next-auth/react'
-import Link from 'next/link'
-import Image from 'next/image'
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
-import VideoEditor from '@/components/VideoEditor'
-import LanguageSwitcher from '@/components/LanguageSwitcher'
-import { useLanguage } from '@/components/LanguageProvider'
+import { EditorProvider, useEditor, EditorClip } from '@/components/studio/EditorContext'
+import StudioLayout from '@/components/studio/StudioLayout'
 
-interface ProcessedClip {
-    id: string
-    videoPath: string
-    originalUrl?: string // The ORIGINAL clean video without subtitles
-    subtitledPath?: string
-    start: number
-    end: number
-    duration: number
-    hasSubtitles: boolean
-    isProcessing: boolean
-    paddingStart?: number
-    trimStart?: number
-    trimEnd?: number
-    subtitleSegments?: any[]
-    subtitleStyle?: any
-    // New editable properties
-    fadeIn?: number
-    fadeOut?: number
-    volume?: number
-    speed?: number
-}
-
-interface EditorData {
-    videoPath: string
-    title: string
-    clips: string[]
-    originalClips: { id: string; start: number; end: number }[]
-    timestamp: number
-}
-
-export default function EditorPage() {
-    const router = useRouter()
+// --- Internal Bootstrapper Component ---
+// Has access to Context, handles loading data
+function EditorInitializer() {
+    const { setClips, setSelectedClipId } = useEditor()
     const params = useParams()
+    const router = useRouter()
     const videoId = params.videoId as string
 
-    const { data: session } = useSession()
-    const { t } = useLanguage()
-
-    const [processedClips, setProcessedClips] = useState<ProcessedClip[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [editorData, setEditorData] = useState<EditorData | null>(null)
 
-    // Load editor data from localStorage
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem(`kadostudio_editor_${videoId}`)
-            if (stored) {
-                const data: EditorData = JSON.parse(stored)
-                setEditorData(data)
+        const loadProject = async () => {
+            try {
+                const stored = localStorage.getItem(`kadostudio_editor_${videoId}`)
+                if (!stored) {
+                    toast.error('Proje bulunamadı')
+                    router.push('/')
+                    return
+                }
 
-                // Convert clips to ProcessedClip format
-                const clips: ProcessedClip[] = data.clips.map((clipDataRaw, index) => {
-                    let videoPath = clipDataRaw
-                    let originalUrl = clipDataRaw // Track original clean video
-                    let subtitledPath: string | undefined = undefined
-                    let paddingStart = 0
+                const data = JSON.parse(stored)
 
-                    let hasSubtitles = false
-                    let subtitleSegments: any[] = []
-                    let subtitleStyle: any = undefined
+                // Transform existing data to new EditorClip format
+                const loadedClips: EditorClip[] = data.clips.map((clipDataRaw: any, index: number) => {
+                    // Similar parsing logic as before, but cleaner
+                    let parsed: any = {}
 
                     try {
-                        const parsed = JSON.parse(clipDataRaw)
-                        if (parsed.url) {
-                            // originalUrl is the clean video without subtitles
-                            originalUrl = parsed.originalUrl || parsed.url
-                            subtitledPath = parsed.subtitledPath
-                            // For preview, use subtitled version if available
-                            videoPath = subtitledPath || parsed.url
-                            paddingStart = parsed.paddingStart || 0
-                            hasSubtitles = parsed.hasSubtitles || false
-                            subtitleSegments = parsed.subtitleSegments || []
-                            subtitleStyle = parsed.subtitleStyle
-                        }
-                    } catch (e) {
-                        // Not JSON, assume string URL
-                        originalUrl = clipDataRaw
+                        parsed = typeof clipDataRaw === 'string' ? JSON.parse(clipDataRaw) : clipDataRaw
+                    } catch {
+                        parsed = { url: clipDataRaw }
                     }
 
-                    const originalStart = data.originalClips[index]?.start || 0
-                    const originalEnd = data.originalClips[index]?.end || 30
-                    const duration = originalEnd - originalStart
+                    const originalInfo = data.originalClips[index] || {}
+
+                    // Determine paths
+                    // If parsed.url is valid JSON object, it might have nested structure? 
+                    // The previous logic handled "string URL" vs "JSON string".
+
+                    const videoUrl = parsed.url || (typeof clipDataRaw === 'string' ? clipDataRaw : '')
+                    const originalUrl = parsed.originalUrl || videoUrl
+                    const subtitledPath = parsed.subtitledPath
+
+                    // Determine timing
+                    // Global start time needs to be calculated if we want a sequence.
+                    // For now, let's just use the clip's duration. 
+                    // If we want a timeline 0..N, we need to accumulate duration.
+                    // But we don't have that easily here unless we reduce. 
+                    // Let's modify this later for sequential. 
+                    // For now, let's assign "start" = 0 for all (stacking on top) or sequential?
+                    // Let's try sequential.
+
+                    const duration = (originalInfo.end || 30) - (originalInfo.start || 0)
 
                     return {
                         id: `clip_${index + 1}`,
-                        videoPath: videoPath, // For preview - uses subtitledPath if available
-                        originalUrl: originalUrl, // Original clean video for re-burning
+                        videoPath: subtitledPath || videoUrl,
+                        originalUrl: originalUrl,
                         subtitledPath: subtitledPath,
-                        start: originalStart,
-                        end: originalEnd,
+                        start: 0, // We will recalculate this after mapping
                         duration: duration,
-                        hasSubtitles: hasSubtitles,
-                        isProcessing: false,
-                        paddingStart: paddingStart,
-                        trimStart: paddingStart,
-                        trimEnd: paddingStart + duration,
-                        subtitleSegments: subtitleSegments,
-                        subtitleStyle: subtitleStyle
+                        trimStart: parsed.paddingStart || 0,
+                        trimEnd: parsed.paddingStart + duration, // Approx
+                        hasSubtitles: parsed.hasSubtitles || false,
+                        subtitleSegments: parsed.subtitleSegments || [],
+                        subtitleStyle: parsed.subtitleStyle,
+                        volume: 1,
+                        opacity: 1,
+                        scale: 1,
+                        position: { x: 0, y: 0 }
                     }
                 })
-                setProcessedClips(clips)
-            } else {
-                toast.error('Klip verisi bulunamadı')
-                router.push('/')
+
+                // Recalculate start times for sequential timeline
+                let runningTime = 0
+                const positionedClips = loadedClips.map(clip => {
+                    const c = { ...clip, start: runningTime }
+                    runningTime += clip.duration
+                    return c
+                })
+
+                setClips(positionedClips)
+
+                // Select first clip by default
+                if (positionedClips.length > 0) {
+                    setSelectedClipId(positionedClips[0].id)
+                }
+
+            } catch (e) {
+                console.error('Failed to load project:', e)
+                toast.error('Proje yüklenemedi')
+            } finally {
+                setIsLoading(false)
             }
-        } catch (e) {
-            console.error('Failed to load editor data:', e)
-            router.push('/')
-        } finally {
-            setIsLoading(false)
         }
-    }, [videoId, router])
 
-    // Add subtitles to single clip
-    const handleAddSubtitles = async (clipIndex: number) => {
-        const clip = processedClips[clipIndex]
-        if (!clip || clip.isProcessing) return
-
-        setProcessedClips(prev => prev.map((c, i) =>
-            i === clipIndex ? { ...c, isProcessing: true } : c
-        ))
-
-        toast.loading(`Klip ${clipIndex + 1} için altyazı ekleniyor...`, { id: `subtitle-${clipIndex}` })
-
-        try {
-            // This will open subtitle editor or directly add
-            // For now, we'll just mark as done - the actual subtitle logic is in VideoEditor
-            toast.success(`Altyazı için SubtitleEditor açılıyor`, { id: `subtitle-${clipIndex}` })
-        } catch (error: any) {
-            console.error('Subtitle error:', error)
-            toast.error(error.message || 'Altyazı hatası', { id: `subtitle-${clipIndex}` })
-        } finally {
-            setProcessedClips(prev => prev.map((c, i) =>
-                i === clipIndex ? { ...c, isProcessing: false } : c
-            ))
-        }
-    }
-
-    // Add subtitles to all clips
-    const handleAddSubtitlesToAll = async () => {
-        for (let i = 0; i < processedClips.length; i++) {
-            await handleAddSubtitles(i)
-        }
-    }
-
-    const handleBack = () => {
-        router.push(`/config/${videoId}`)
-    }
+        loadProject()
+    }, [videoId, router, setClips, setSelectedClipId])
 
     if (isLoading) {
         return (
-            <main className="min-h-screen bg-bg-terminal text-white flex items-center justify-center">
-                <div className="font-mono text-neon-green animate-pulse">Loading editor...</div>
-            </main>
+            <div className="flex h-screen items-center justify-center bg-bg-terminal text-neon-green font-mono">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-neon-green border-t-transparent rounded-full animate-spin"></div>
+                    <div className="animate-pulse">&gt; LOADING STUDIO ENV...</div>
+                </div>
+            </div>
         )
     }
 
-    if (!editorData || processedClips.length === 0) {
-        return null
-    }
+    return <StudioLayout />
+}
 
+// --- Main Page Wrapper ---
+export default function EditorPage() {
     return (
-        <main className="min-h-screen bg-bg-terminal text-white">
-            {/* Header */}
-            <header className="border-b border-gray-800 bg-bg-card">
-                <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Link href="/" className="relative w-14 h-14 hover:opacity-80 transition-opacity">
-                            <Image
-                                src="/logo_final.png"
-                                alt="Kadostudio"
-                                fill
-                                className="object-contain"
-                                priority
-                            />
-                        </Link>
-                        <div className="font-mono text-xs text-neon-amber">
-                            [ STEP 2/2 - EDITOR ]
-                        </div>
-                        <div className="font-mono text-xs text-gray-500 hidden md:block truncate max-w-xs">
-                            {editorData.title}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        {session && (
-                            <div className="font-mono text-xs text-neon-green hidden md:block">
-                                {session.user?.tokens} {t('nav.credits')}
-                            </div>
-                        )}
-                        <LanguageSwitcher />
-                    </div>
-                </div>
-            </header>
-
-
-
-            {/* Content */}
-            <div className="container mx-auto px-4 pb-12">
-                <VideoEditor
-                    processedClips={processedClips}
-                    setProcessedClips={setProcessedClips}
-                    isGeneratingClips={false}
-                    isAnalyzing={false}
-                    processProgress={100}
-                    onBack={handleBack}
-                    onAddSubtitles={handleAddSubtitles}
-                    onAddSubtitlesToAll={handleAddSubtitlesToAll}
-                />
-            </div>
-        </main>
+        <EditorProvider>
+            <EditorInitializer />
+        </EditorProvider>
     )
 }
