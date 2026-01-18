@@ -82,7 +82,7 @@ const Sidebar = () => {
                             </div>
                         </div>
 
-                        {selectedClip.hasSubtitles && (
+                        {selectedClip.hasSubtitles ? (
                             <div className="space-y-2 pt-2 border-t border-gray-800">
                                 <div className="flex items-center justify-between">
                                     <div className="text-[10px] text-neon-amber">&gt; SUBTITLES</div>
@@ -96,6 +96,16 @@ const Sidebar = () => {
                                 <div className="p-2 bg-black/40 rounded border border-gray-800 text-[10px] text-gray-400">
                                     {selectedClip.subtitleSegments?.length || 0} segments
                                 </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2 pt-2 border-t border-gray-800">
+                                <div className="text-[10px] text-neon-amber">&gt; SUBTITLES</div>
+                                <button
+                                    onClick={handleEditSubtitle}
+                                    className="w-full text-xs bg-neon-green/20 text-neon-green border border-neon-green/50 py-2 rounded hover:bg-neon-green/30 flex items-center justify-center gap-2"
+                                >
+                                    <span>+</span> ADD SUBTITLES
+                                </button>
                             </div>
                         )}
                     </div>
@@ -156,10 +166,33 @@ const VideoPreview = () => {
 }
 
 const Timeline = () => {
-    const { currentTime, duration, clips, selectedClipId, setSelectedClipId } = useEditor()
+    const { currentTime, duration, clips, selectedClipId, setSelectedClipId, seekTo } = useEditor()
+    const containerRef = useRef<HTMLDivElement>(null)
 
     // Simple mock scale
-    const pixelsPerSecond = 5 // Zoom level
+    const pixelsPerSecond = 20 // Bigger zoom for easier clicking
+
+    const handleTimelineClick = (e: React.MouseEvent) => {
+        if (!containerRef.current) return
+
+        const rect = containerRef.current.getBoundingClientRect()
+        const x = e.clientX - rect.left + containerRef.current.scrollLeft
+        // container padding/margin might affect x, but let's assume inner click
+        // Actually, if we click on the container which scrolls, e.clientX is relative to viewport.
+        // rect.left is viewport relative.
+        // So (e.clientX - rect.left) is X position VISIBLE in container.
+        // We add scrollLeft to get absolute X in the scrolled content.
+
+        // However, we need to account for the generated width logic.
+        // The width is `duration * pixelsPerSecond + 200`
+        // So time = x / pixelsPerSecond approximately (if 0 padded)
+
+        // There is p-4 (16px) padding in the container.
+        const scrollX = x - 16 // Remove start padding
+        const time = Math.max(0, scrollX / pixelsPerSecond)
+
+        seekTo(Math.min(time, duration))
+    }
 
     return (
         <div className="h-full border-t-2 border-neon-green/30 bg-bg-card flex flex-col font-mono select-none">
@@ -177,13 +210,18 @@ const Timeline = () => {
             </div>
 
             {/* Timeline Tracks Area */}
-            <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar relative bg-[#111]">
+            <div
+                ref={containerRef}
+                className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar relative bg-[#111] cursor-text"
+                onClick={handleTimelineClick}
+            >
 
                 {/* Time Ruler */}
-                <div className="relative h-6 border-b border-gray-800 bg-[#1a1a1a]">
-                    {[...Array(20)].map((_, i) => (
-                        <div key={i} className="absolute bottom-0 text-[8px] text-gray-500 pl-1 border-l border-gray-700 h-3" style={{ left: `${i * 10}%` }}>
-                            {(i * (duration / 20)).toFixed(0)}s
+                <div className="relative h-6 border-b border-gray-800 bg-[#1a1a1a] min-w-full" style={{ width: `${duration * pixelsPerSecond + 100}px` }}>
+                    {[...Array(Math.ceil(duration) + 1)].map((_, i) => (
+                        // Show every second
+                        <div key={i} className="absolute bottom-0 text-[8px] text-gray-500 pl-1 border-l border-gray-700 h-3" style={{ left: `${16 + i * pixelsPerSecond}px` }}>
+                            {i}s
                         </div>
                     ))}
                 </div>
@@ -193,20 +231,23 @@ const Timeline = () => {
 
                     {/* Video Track */}
                     <div className="relative h-12 bg-gray-900/50 rounded border border-gray-800 flex items-center">
-                        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gray-800 border-r border-gray-700 flex items-center justify-center z-10">
+                        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gray-800 border-r border-gray-700 flex items-center justify-center z-10 sticky left-0 shadow-lg">
                             <span className="text-[9px] text-blue-400">VIDEO</span>
                         </div>
                         <div className="ml-24 flex-1 relative h-full">
                             {clips.map(clip => (
                                 <div
                                     key={clip.id}
-                                    onClick={() => setSelectedClipId(clip.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation() // Don't seek on clip click, just select
+                                        setSelectedClipId(clip.id)
+                                    }}
                                     className={`absolute top-1 bottom-1 rounded cursor-pointer overflow-hidden border transition-colors flex items-center px-2 group
                                         ${selectedClipId === clip.id ? 'bg-blue-900/40 border-blue-500' : 'bg-gray-800 border-gray-700 hover:border-gray-500'}
                                     `}
                                     style={{
-                                        left: `${clip.start * 2}%`, // Simplified positioning for now
-                                        width: `${(clip.duration / duration) * 80}%` // Simplified width
+                                        left: `${clip.start * pixelsPerSecond}px`,
+                                        width: `${clip.duration * pixelsPerSecond}px`
                                     }}
                                 >
                                     <div className="text-[9px] text-blue-300 truncate font-bold">CLIP_{clip.id.split('_')[1]}</div>
@@ -224,7 +265,7 @@ const Timeline = () => {
 
                     {/* Subtitle Track */}
                     <div className="relative h-12 bg-gray-900/50 rounded border border-gray-800 flex items-center">
-                        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gray-800 border-r border-gray-700 flex items-center justify-center z-10">
+                        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gray-800 border-r border-gray-700 flex items-center justify-center z-10 sticky left-0 shadow-lg">
                             <span className="text-[9px] text-amber-400">TEXT</span>
                         </div>
                         <div className="ml-24 flex-1 relative h-full">
@@ -235,8 +276,12 @@ const Timeline = () => {
                 </div>
 
                 {/* Playhead Line */}
-                {/* Note: This logic needs to sync with scrolling, simplified here */}
-                {/* <div className="absolute top-0 bottom-0 w-0.5 bg-neon-red z-30 pointer-events-none" style={{ left: '30%' }}></div> */}
+                <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-neon-red z-30 pointer-events-none"
+                    style={{ left: `${16 + currentTime * pixelsPerSecond}px` }}
+                >
+                    <div className="absolute -top-0 -translate-x-1/2 text-[8px] text-neon-red bg-black/50 px-1 rounded">▼</div>
+                </div>
             </div>
         </div>
     )
