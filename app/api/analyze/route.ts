@@ -83,63 +83,10 @@ export async function POST(request: NextRequest) {
                 let analysisMethod = 'audio'
                 let heatmapWarning = ''
 
-                // Try to get YouTube heatmap data if URL is provided
+                // Note: YouTube heatmap data requires yt-dlp which is blocked on VPS
+                // Falling back to audio analysis for clip selection
                 if (youtubeUrl) {
-                    try {
-                        updateJob(job.id, { message: 'YouTube verileri inceleniyor (OAuth2)...' })
-
-                        // Use OAuth2 authentication
-                        const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
-                        const cmd = `python3 -m yt_dlp --dump-json "${youtubeUrl}" --user-agent "${userAgent}" --extractor-args "youtube:player_client=ios" --username oauth2 --password ""`
-
-                        const { stdout: videoJson } = await execAsync(cmd, { maxBuffer: 50 * 1024 * 1024 })
-                        const videoData = JSON.parse(videoJson)
-
-                        // Check for heatmap data
-                        const heatmap: HeatmapPoint[] = videoData.heatmap || []
-
-                        if (heatmap.length > 0) {
-                            analysisMethod = 'engagement'
-
-                            // Find peak engagement points
-                            const sortedHeatmap = [...heatmap].sort((a, b) => b.value - a.value)
-
-                            for (const point of sortedHeatmap) {
-                                if (selectedClips.length >= clipCount) break
-
-                                // Center the clip around the peak engagement point
-                                // point.start_time represents the start of the "highlighted" moment
-                                // We want this moment to be in the middle of our clip
-                                const halfDuration = clipDuration / 2
-                                let startTime = Math.max(0, point.start_time - halfDuration)
-                                const endTime = Math.min(startTime + clipDuration, totalDuration)
-
-                                // Adjust start time if end time was clamped
-                                if (endTime === totalDuration) {
-                                    startTime = Math.max(0, endTime - clipDuration)
-                                }
-
-                                // Check for overlap
-                                const overlaps = selectedClips.some(clip =>
-                                    Math.abs(clip.start - startTime) < clipDuration
-                                )
-
-                                if (!overlaps && startTime < totalDuration - 10) {
-                                    selectedClips.push({
-                                        start: startTime,
-                                        end: endTime,
-                                        score: Math.round(point.value * 100),
-                                        reason: `📊 En çok izlenen (${Math.round(point.value * 100)}% engagement)`
-                                    })
-                                }
-                            }
-                        } else {
-                            heatmapWarning = 'Bu video için izlenme verisi bulunamadı. Ses analizi kullanılıyor.'
-                        }
-                    } catch (e) {
-                        console.error('Heatmap fetch error:', e)
-                        heatmapWarning = 'YouTube verisi alınamadı (Bot koruması). Ses analizi kullanılıyor.'
-                    }
+                    heatmapWarning = 'VPS üzerinde YouTube verisi alınamıyor. Ses analizi kullanılıyor.'
                 }
 
                 // Fallback to audio analysis if no heatmap clips found

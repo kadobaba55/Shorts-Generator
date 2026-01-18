@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         // Enqueue the job - check if it can start immediately
         const { canStart, position } = enqueueJob(job.id, 'download')
 
-        // Start background process
+        // Start background process using Cobalt API
         const startDownload = async () => {
             // Wait in queue if needed
             if (!canStart) {
@@ -73,142 +73,148 @@ export async function POST(req: NextRequest) {
                 })
             }
 
-            updateJob(job.id, { status: 'processing', message: 'Video bilgileri alınıyor...', queuePosition: undefined })
+            updateJob(job.id, { status: 'processing', message: 'Cobalt API ile video alınıyor...', queuePosition: undefined })
 
             try {
-                const iosUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+                // Step 1: Call Cobalt API to get download URL
+                const COBALT_API = 'https://api.cobalt.tools'
 
-                // Use OAuth2 authentication (requires yt-dlp-youtube-oauth2 plugin)
-                const infoCmd = `python3 -m yt_dlp --dump-json "${url}" --user-agent "${iosUserAgent}" --extractor-args "youtube:player_client=ios" --username oauth2 --password ""`
-
-                updateJob(job.id, { message: 'Video bilgileri alınıyor (OAuth2)...' })
-                const { stdout: infoJson } = await execAsync(infoCmd, { maxBuffer: 50 * 1024 * 1024 })
-                const videoInfo = JSON.parse(infoJson)
-
-                updateJob(job.id, { message: `İndiriliyor: ${videoInfo.title.substring(0, 30)}...` })
-
-                let errorOutput = ''
-
-                // Prepare args for download with OAuth2
-                const args = [
-                    '-u',
-                    '-m', 'yt_dlp',
-                    '-f', 'best[ext=mp4]/best',
-                    '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-                    '--extractor-args', 'youtube:player_client=ios',
-                    '--username', 'oauth2',
-                    '--password', '',
-                    '-o', outputPath,
-                    '--newline',
-                    '--no-colors',
-                    url
-                ]
-
-                const child = spawn('python3', args, {
-                    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+                const cobaltResponse = await fetch(COBALT_API, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: url,
+                        videoQuality: '1080',
+                        filenameStyle: 'basic',
+                        downloadMode: 'auto'
+                    })
                 })
 
-                const parseOutput = (data: Buffer) => {
-                    const output = data.toString()
-                    console.log('yt-dlp output:', output.trim())
+                if (!cobaltResponse.ok) {
+                    const errorText = await cobaltResponse.text()
+                    throw new Error(`Cobalt API hatası: ${cobaltResponse.status} - ${errorText}`)
+                }
 
-                    const progressMatch = output.match(/(\d{1,3}(\.\d+)?)%/)
-                    const etaMatch = output.match(/ETA\s+(\d+:\d+)/)
+                const cobaltData = await cobaltResponse.json()
+                console.log('Cobalt response:', cobaltData)
 
-                    if (progressMatch) {
-                        const progress = parseFloat(progressMatch[1])
-                        if (!isNaN(progress) && progress > 0 && progress <= 100) {
-                            updateJob(job.id, {
-                                progress,
-                                eta: etaMatch ? etaMatch[1] : undefined
-                            })
-                        }
+                if (cobaltData.status === 'error') {
+                    throw new Error(cobaltData.error?.code || 'Cobalt API bilinmeyen hata')
+                }
+
+                // Get the download URL from Cobalt response
+                let downloadUrl = ''
+                let videoTitle = 'video'
+
+                if (cobaltData.status === 'tunnel' || cobaltData.status === 'redirect') {
+                    downloadUrl = cobaltData.url
+                    videoTitle = cobaltData.filename || 'video'
+                } else if (cobaltData.status === 'picker' && cobaltData.picker?.length > 0) {
+                    // For videos with multiple options, pick the first video
+                    const videoOption = cobaltData.picker.find((p: any) => p.type === 'video') || cobaltData.picker[0]
+                    downloadUrl = videoOption.url
+                    videoTitle = videoOption.filename || 'video'
+                } else {
+                    throw new Error('Cobalt API geçersiz yanıt döndürdü')
+                }
+
+                updateJob(job.id, { message: `İndiriliyor: ${videoTitle.substring(0, 30)}...`, progress: 10 })
+
+                // Step 2: Download video from Cobalt's CDN
+                const videoResponse = await fetch(downloadUrl)
+                if (!videoResponse.ok) {
+                    throw new Error(`Video indirme hatası: ${videoResponse.status}`)
+                }
+
+                const contentLength = videoResponse.headers.get('content-length')
+                const totalSize = contentLength ? parseInt(contentLength, 10) : 0
+
+                // Stream to file with progress
+                const fileStream = fs.createWriteStream(outputPath)
+                const reader = videoResponse.body?.getReader()
+
+                if (!reader) {
+                    throw new Error('Video stream okunamadı')
+                }
+
+                let downloadedSize = 0
+                while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+
+                    fileStream.write(Buffer.from(value))
+                    downloadedSize += value.length
+
+                    if (totalSize > 0) {
+                        const progress = Math.round((downloadedSize / totalSize) * 80) + 10 // 10-90%
+                        updateJob(job.id, { progress })
                     }
                 }
 
-                child.stdout.on('data', parseOutput)
+                fileStream.end()
+                await new Promise<void>((resolve) => fileStream.on('finish', () => resolve()))
 
-                child.stderr.on('data', (data) => {
-                    const output = data.toString()
-                    errorOutput += output
-                    if (!output.includes('[download]') && !output.includes('%')) {
-                        console.error('yt-dlp stderr:', output)
-                    }
-                    parseOutput(data)
-                })
+                // Verify downloaded file
+                if (!fs.existsSync(outputPath)) {
+                    throw new Error('İndirilen dosya bulunamadı')
+                }
+                const fileSize = fs.statSync(outputPath).size
+                console.log(`✅ Download complete. File: ${outputPath}, Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
 
-                child.on('close', async (code) => {
-                    console.log(`yt-dlp process closed with code: ${code}`)
+                // Step 3: Upload to R2
+                const { uploadFileToR2 } = require('@/lib/storage')
+                updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️', progress: 95 })
 
-                    if (code === 0) {
-                        try {
-                            // Verify downloaded file exists
-                            if (!fs.existsSync(outputPath)) {
-                                throw new Error(`Downloaded file not found at: ${outputPath}`)
-                            }
-                            const fileSize = fs.statSync(outputPath).size
-                            console.log(`✅ Download complete. File: ${outputPath}, Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
+                const r2Key = `uploads/${videoId}.mp4`
+                const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
+                console.log('✅ R2 upload complete:', publicUrl)
 
-                            const { uploadFileToR2 } = require('@/lib/storage')
-                            updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️', progress: 95 })
-                            console.log('Starting R2 upload...')
+                // Delete local file
+                try {
+                    fs.unlinkSync(outputPath)
+                    console.log('Local file deleted')
+                } catch (delErr) {
+                    console.warn('Could not delete local file:', delErr)
+                }
 
-                            // Upload to R2
-                            const r2Key = `uploads/${videoId}.mp4`
-                            const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
-                            console.log('✅ R2 upload complete:', publicUrl)
+                // Get video duration using ffprobe
+                let duration = 0
+                try {
+                    const { stdout: durationStr } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`)
+                    duration = parseFloat(durationStr.trim()) || 0
+                } catch (e) {
+                    console.warn('Could not get duration:', e)
+                }
 
-                            // Delete local file
-                            try {
-                                fs.unlinkSync(outputPath)
-                                console.log('Local file deleted')
-                            } catch (delErr) {
-                                console.warn('Could not delete local file:', delErr)
-                            }
-
-                            // Complete Job with Public URL
-                            completeJob(job.id, 'download')
-
-                            updateJob(job.id, {
-                                status: 'completed',
-                                progress: 100,
-                                result: {
-                                    videoId,
-                                    videoPath: publicUrl,
-                                    title: videoInfo.title,
-                                    duration: videoInfo.duration,
-                                    thumbnail: videoInfo.thumbnail
-                                }
-                            })
-                            console.log('✅ Download job completed successfully')
-                        } catch (uploadError: any) {
-                            console.error('❌ R2 Upload Failed:', uploadError)
-                            completeJob(job.id, 'download')
-                            updateJob(job.id, { status: 'error', error: `R2 Yükleme Hatası: ${uploadError.message}` })
-                        }
-                    } else {
-                        console.error(`❌ yt-dlp failed with code ${code}`)
-                        completeJob(job.id, 'download')
-                        console.error('Error output:', errorOutput)
-
-                        let failReason = 'Bilinmeyen hata'
-                        if (errorOutput) {
-                            const lines = errorOutput.split('\n')
-                            failReason = lines.find(l => l.includes('ERROR:')) ||
-                                lines.find(l => l.includes('Errno')) ||
-                                lines.find(l => l.trim().length > 0 && !l.includes('[download]')) ||
-                                errorOutput.substring(0, 100)
-                        }
-
-                        updateJob(job.id, { status: 'error', error: `İndirme hatası (${code}): ${failReason}` })
+                // Complete Job
+                completeJob(job.id, 'download')
+                updateJob(job.id, {
+                    status: 'completed',
+                    progress: 100,
+                    result: {
+                        videoId,
+                        videoPath: publicUrl,
+                        title: videoTitle.replace(/\.[^/.]+$/, ''), // Remove extension
+                        duration: duration,
+                        thumbnail: `https://img.youtube.com/vi/${extractYouTubeId(url)}/maxresdefault.jpg`
                     }
                 })
+                console.log('✅ Download job completed successfully')
 
             } catch (error: any) {
-                console.error('Download setup error:', error)
-                completeJob(job.id, 'download') // Release slot on error
-                updateJob(job.id, { status: 'error', error: error.message || 'Başlatma hatası' })
+                console.error('Download error:', error)
+                completeJob(job.id, 'download')
+                updateJob(job.id, { status: 'error', error: error.message || 'İndirme hatası' })
             }
+        }
+
+        // Helper to extract YouTube video ID
+        const extractYouTubeId = (ytUrl: string): string => {
+            const match = ytUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+            return match ? match[1] : ''
         }
 
         // Fire and forget
