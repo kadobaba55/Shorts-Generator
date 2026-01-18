@@ -76,8 +76,8 @@ export async function POST(req: NextRequest) {
             updateJob(job.id, { status: 'processing', message: 'Cobalt API ile video alınıyor...', queuePosition: undefined })
 
             try {
-                // Step 1: Call Cobalt API to get download URL
-                const COBALT_API = 'https://api.cobalt.tools'
+                // Step 1: Call Cobalt API to get download URL (self-hosted)
+                const COBALT_API = process.env.COBALT_API_URL || 'http://localhost:9000'
 
                 const cobaltResponse = await fetch(COBALT_API, {
                     method: 'POST',
