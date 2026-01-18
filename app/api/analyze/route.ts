@@ -23,7 +23,7 @@ interface HeatmapPoint {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const { videoPath, clipCount = 3, clipDuration = 30, youtubeUrl } = body
+        const { videoPath, clipCount = 3, clipDuration = 30, youtubeUrl, heatmap } = body
 
         if (!videoPath) {
             return NextResponse.json(
@@ -83,10 +83,43 @@ export async function POST(request: NextRequest) {
                 let analysisMethod = 'audio'
                 let heatmapWarning = ''
 
-                // Note: YouTube heatmap data requires yt-dlp which is blocked on VPS
-                // Falling back to audio analysis for clip selection
-                if (youtubeUrl) {
-                    heatmapWarning = 'VPS üzerinde YouTube verisi alınamıyor. Ses analizi kullanılıyor.'
+                // Use client-provided heatmap data if available
+                if (heatmap && Array.isArray(heatmap) && heatmap.length > 0) {
+                    analysisMethod = 'engagement'
+                    updateJob(job.id, { message: '📊 Heatmap verisi kullanılıyor...' })
+
+                    // Sort by engagement value (highest first)
+                    const sortedHeatmap = [...heatmap].sort((a: HeatmapPoint, b: HeatmapPoint) => b.value - a.value)
+
+                    for (const point of sortedHeatmap) {
+                        if (selectedClips.length >= clipCount) break
+
+                        // Center the clip around the peak engagement point
+                        const halfDuration = clipDuration / 2
+                        let startTime = Math.max(0, point.start_time - halfDuration)
+                        const endTime = Math.min(startTime + clipDuration, totalDuration)
+
+                        // Adjust start time if end time was clamped
+                        if (endTime === totalDuration) {
+                            startTime = Math.max(0, endTime - clipDuration)
+                        }
+
+                        // Check for overlap with already selected clips
+                        const overlaps = selectedClips.some(clip =>
+                            Math.abs(clip.start - startTime) < clipDuration
+                        )
+
+                        if (!overlaps && startTime < totalDuration - 10) {
+                            selectedClips.push({
+                                start: startTime,
+                                end: endTime,
+                                score: Math.round(point.value * 100),
+                                reason: `📊 En çok izlenen (${Math.round(point.value * 100)}% engagement)`
+                            })
+                        }
+                    }
+                } else if (youtubeUrl) {
+                    heatmapWarning = 'Heatmap verisi sağlanmadı. Ses analizi kullanılıyor.'
                 }
 
                 // Fallback to audio analysis if no heatmap clips found

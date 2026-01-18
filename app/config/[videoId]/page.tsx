@@ -14,6 +14,7 @@ import {
 } from '@/lib/estimateTime'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useLanguage } from '@/components/LanguageProvider'
+import { extractVideoId, fetchYouTubeHeatmap, convertHeatmapForApi } from '@/lib/youtubeHeatmap'
 
 interface VideoData {
     videoPath: string
@@ -85,6 +86,24 @@ export default function ConfigPage() {
                 // Step 1: Analyze video (Only for AUTO mode)
                 toast.loading('Video analiz ediliyor...', { id: 'processing' })
 
+                // Try to fetch YouTube heatmap data client-side
+                let heatmapData = null
+                if (videoData.url) {
+                    const ytVideoId = extractVideoId(videoData.url)
+                    if (ytVideoId) {
+                        try {
+                            toast.loading('YouTube heatmap verisi alınıyor...', { id: 'processing' })
+                            const heatmap = await fetchYouTubeHeatmap(ytVideoId)
+                            if (heatmap && heatmap.heatMarkers.length > 0) {
+                                heatmapData = convertHeatmapForApi(heatmap)
+                                console.log('Heatmap fetched:', heatmapData.length, 'points')
+                            }
+                        } catch (err) {
+                            console.warn('Could not fetch heatmap:', err)
+                        }
+                    }
+                }
+
                 const analyzeRes = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -92,7 +111,8 @@ export default function ConfigPage() {
                         videoPath: videoData.videoPath,
                         clipCount,
                         clipDuration,
-                        youtubeUrl: videoData.url
+                        youtubeUrl: videoData.url,
+                        heatmap: heatmapData
                     })
                 })
 
