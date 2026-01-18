@@ -10,10 +10,15 @@ import Hero from '@/components/Hero'
 import { formatTimeRemaining } from '@/lib/estimateTime'
 import { useLanguage } from '@/components/LanguageProvider'
 
+import { SplineScene } from '@/components/ui/SplineScene'
+import { useDevicePerformance } from '@/lib/useDevicePerformance'
+import { motion } from 'framer-motion'
+
 export default function Home() {
     const { data: session } = useSession()
     const router = useRouter()
     const { t } = useLanguage()
+    const { shouldShow3D } = useDevicePerformance()
 
     // Download State
     const [url, setUrl] = useState('')
@@ -126,14 +131,29 @@ export default function Home() {
     return (
         <main className="min-h-screen bg-kado-bg text-kado-text relative overflow-hidden">
 
+            {/* Background Spline Robot - Global Tracking */}
+            {shouldShow3D && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 1 }}
+                    className="fixed top-0 bottom-0 left-0 w-[140%] lg:w-[150%] z-0 pointer-events-none" // Wide canvas to position robot right, starts from left
+                >
+                    <SplineScene
+                        scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+                        className="w-full h-full pointer-events-auto" // Robot captures mouse events
+                    />
+                </motion.div>
+            )}
+
             {/* Background Gradient Orbs */}
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-kado-primary/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-kado-secondary/20 rounded-full blur-3xl pointer-events-none" />
 
             {/* Header */}
-            <header className="relative z-10 border-b border-kado-border/50 bg-kado-bg/80 backdrop-blur-lg sticky top-0">
+            <header className="relative z-10 border-b border-kado-border/50 bg-kado-bg/80 backdrop-blur-lg sticky top-0 pointer-events-none">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 pointer-events-auto">
                         {/* Logo */}
                         <Link href="/" className="relative w-12 h-12 hover:scale-105 transition-transform">
                             <Image
@@ -150,12 +170,12 @@ export default function Home() {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="hidden md:flex items-center gap-6">
+                    <nav className="hidden md:flex items-center gap-6 pointer-events-auto">
                         {/* Links removed per request */}
                     </nav>
 
                     {/* Auth Buttons */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 pointer-events-auto">
                         {session ? (
                             <div className="flex items-center gap-3">
                                 <Link
@@ -192,7 +212,7 @@ export default function Home() {
             </header>
 
             {/* Content Area - Hero */}
-            <div className="relative z-10 container mx-auto px-4 pb-12">
+            <div className="relative z-10 container mx-auto px-4 pb-12 pointer-events-none">
                 <Hero
                     onVideoSubmit={handleDownload}
                     isDownloading={isDownloading}
@@ -202,8 +222,8 @@ export default function Home() {
             </div>
 
             {/* Footer */}
-            <footer className="relative z-10 border-t border-kado-border/50 py-8 mt-auto">
-                <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <footer className="relative z-10 border-t border-kado-border/50 py-8 mt-auto pointer-events-none">
+                <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 pointer-events-auto">
                     <p className="text-sm text-kado-text-muted font-body">
                         {t('footer.copyright')}
                     </p>

@@ -47,7 +47,7 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
             <div className="max-w-7xl mx-auto h-full flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-4">
 
                 {/* Left Side - Content */}
-                <div className="flex-1 w-full lg:max-w-xl space-y-8 text-center lg:text-left relative z-10">
+                <div className="flex-1 w-full lg:max-w-xl space-y-8 text-center lg:text-left relative z-10 pointer-events-none">
 
                     {/* Animated Badge */}
                     <motion.div
@@ -74,29 +74,26 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                             <span className="text-gradient">{t('home.hero.titleHighlight')}</span>
                             <span className="text-kado-text">{t('home.hero.titleSuffix')}</span>
                         </h1>
-                        <p className="text-lg text-kado-text-secondary max-w-lg mx-auto lg:mx-0 font-body">
+                        <p className="text-lg text-kado-text-secondary max-w-lg mx-auto lg:mx-0 font-body leading-relaxed">
                             {t('home.hero.subtitle')}
                         </p>
                     </motion.div>
 
                     {/* URL Input Form */}
-                    <motion.form
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        onSubmit={handleSubmit}
-                        className="w-full"
-                    >
-                        <div className={`
+                    <div className="relative max-w-lg mx-auto lg:mx-0">
+                        <motion.form
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            onSubmit={handleSubmit}
+                            className="w-full pointer-events-none"
+                        >
+                            <div className={`
                             relative rounded-2xl overflow-hidden transition-all duration-300
-                            ${isFocused ? 'shadow-glow-primary' : ''}
+                            ${isFocused ? 'ring-2 ring-kado-primary shadow-lg shadow-kado-primary/20' : 'border border-kado-border bg-kado-surface/50'}
                         `}>
-                            {/* Gradient Border Effect */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-kado-primary via-kado-secondary to-kado-primary bg-[length:200%_auto] animate-shimmer rounded-2xl" />
-
-                            <div className="relative m-[2px] bg-kado-surface rounded-2xl">
-                                <div className="flex flex-col sm:flex-row items-stretch p-2 gap-2">
-                                    <div className="relative flex-1 flex items-center">
+                                <div className="flex flex-col sm:flex-row">
+                                    <div className="flex-1">
                                         <input
                                             type="text"
                                             value={url}
@@ -105,13 +102,13 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                             onBlur={() => setIsFocused(false)}
                                             placeholder={t('home.hero.inputPlaceholder')}
                                             disabled={isDownloading}
-                                            className="w-full px-4 py-4 bg-transparent text-kado-text font-body text-base placeholder-kado-text-muted focus:outline-none disabled:opacity-50"
+                                            className="w-full px-4 py-4 bg-transparent text-kado-text font-body text-base placeholder-kado-text-muted focus:outline-none disabled:opacity-50 pointer-events-auto"
                                         />
                                     </div>
                                     <button
                                         type="submit"
                                         disabled={isDownloading || !url.trim()}
-                                        className="btn-primary py-4 px-8 rounded-xl text-base font-heading font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="btn-primary py-4 px-8 rounded-xl text-base font-heading font-semibold disabled:opacity-50 disabled:cursor-not-allowed pointer-events-auto"
                                     >
                                         {isDownloading ? (
                                             <span className="flex items-center gap-2">
@@ -124,35 +121,35 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                                     </button>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Progress Bar */}
-                        {isDownloading && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                className="mt-6 space-y-3"
-                            >
-                                <div className="flex items-center justify-between text-sm font-body">
-                                    <span className="text-kado-text-secondary">
-                                        Video indiriliyor...
-                                    </span>
-                                    <span className="text-kado-primary font-semibold">{downloadProgress}%</span>
-                                </div>
-                                <div className="progress-bar">
-                                    <div
-                                        className="progress-bar-fill"
-                                        style={{ width: `${downloadProgress}%` }}
-                                    />
-                                </div>
-                                {estimatedTimeRemaining && (
-                                    <p className="text-xs text-kado-text-muted text-center lg:text-left font-body">
-                                        Tahmini: {estimatedTimeRemaining} kaldı
-                                    </p>
-                                )}
-                            </motion.div>
-                        )}
-                    </motion.form>
+                            {/* Progress Bar */}
+                            {isDownloading && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="mt-6 space-y-3"
+                                >
+                                    <div className="flex items-center justify-between text-sm font-body">
+                                        <span className="text-kado-text-secondary">
+                                            Video indiriliyor...
+                                        </span>
+                                        <span className="text-kado-primary font-semibold">{downloadProgress}%</span>
+                                    </div>
+                                    <div className="progress-bar">
+                                        <div
+                                            className="progress-bar-fill"
+                                            style={{ width: `${downloadProgress}%` }}
+                                        />
+                                    </div>
+                                    {estimatedTimeRemaining && (
+                                        <p className="text-xs text-kado-text-muted text-center lg:text-left font-body">
+                                            Tahmini: {estimatedTimeRemaining} kaldı
+                                        </p>
+                                    )}
+                                </motion.div>
+                            )}
+                        </motion.form>
+                    </div>
 
                     {/* Features Grid */}
                     <motion.div
@@ -202,20 +199,8 @@ export default function Hero({ onVideoSubmit, isDownloading, downloadProgress, e
                     </motion.div>
                 </div>
 
-                {/* Right Side - 3D Robot */}
-                {shouldShow3D && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.3, duration: 0.5 }}
-                        className="flex-1 w-full h-[400px] lg:h-[600px] relative pointer-events-auto"
-                    >
-                        <SplineScene
-                            scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                            className="w-full h-full"
-                        />
-                    </motion.div>
-                )}
+                {/* Right Side - Spacer for Robot */}
+                <div className="flex-1 w-full h-[400px] lg:h-[600px] hidden lg:block pointer-events-none" />
             </div>
         </div>
     )
