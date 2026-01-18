@@ -123,39 +123,48 @@ export async function POST(req: NextRequest) {
 
                 updateJob(job.id, { message: `İndiriliyor: ${videoTitle.substring(0, 30)}...`, progress: 10 })
 
-                // Step 2: Download video from Cobalt's CDN
-                const videoResponse = await fetch(downloadUrl)
-                if (!videoResponse.ok) {
-                    throw new Error(`Video indirme hatası: ${videoResponse.status}`)
-                }
+                // Step 2: Download video from Cobalt's tunnel URL using Node.js streams
+                // Cobalt tunnel URLs require proper streaming - fetch doesn't work well in Next.js server
+                await new Promise<void>((resolve, reject) => {
+                    const urlObj = new URL(downloadUrl)
+                    const httpModule = urlObj.protocol === 'https:' ? require('https') : require('http')
 
-                const contentLength = videoResponse.headers.get('content-length')
-                const totalSize = contentLength ? parseInt(contentLength, 10) : 0
+                    const request = httpModule.get(downloadUrl, (response: any) => {
+                        if (response.statusCode !== 200) {
+                            reject(new Error(`Video indirme hatası: ${response.statusCode}`))
+                            return
+                        }
 
-                // Stream to file with progress
-                const fileStream = fs.createWriteStream(outputPath)
-                const reader = videoResponse.body?.getReader()
+                        const contentLength = response.headers['content-length']
+                        const totalSize = contentLength ? parseInt(contentLength, 10) : 0
 
-                if (!reader) {
-                    throw new Error('Video stream okunamadı')
-                }
+                        const fileStream = fs.createWriteStream(outputPath)
+                        let downloadedSize = 0
 
-                let downloadedSize = 0
-                while (true) {
-                    const { done, value } = await reader.read()
-                    if (done) break
+                        response.on('data', (chunk: Buffer) => {
+                            downloadedSize += chunk.length
+                            if (totalSize > 0) {
+                                const progress = Math.round((downloadedSize / totalSize) * 80) + 10
+                                updateJob(job.id, { progress })
+                            }
+                        })
 
-                    fileStream.write(Buffer.from(value))
-                    downloadedSize += value.length
+                        response.pipe(fileStream)
 
-                    if (totalSize > 0) {
-                        const progress = Math.round((downloadedSize / totalSize) * 80) + 10 // 10-90%
-                        updateJob(job.id, { progress })
-                    }
-                }
+                        fileStream.on('finish', () => {
+                            fileStream.close()
+                            resolve()
+                        })
 
-                fileStream.end()
-                await new Promise<void>((resolve) => fileStream.on('finish', () => resolve()))
+                        fileStream.on('error', reject)
+                    })
+
+                    request.on('error', reject)
+                    request.setTimeout(300000, () => { // 5 min timeout
+                        request.destroy()
+                        reject(new Error('Download timeout'))
+                    })
+                })
 
                 // Verify downloaded file
                 if (!fs.existsSync(outputPath)) {
