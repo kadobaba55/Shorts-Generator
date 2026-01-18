@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
                 if (selectedClips.length === 0) {
                     analysisMethod = 'audio'
                     updateJob(job.id, {
-                        message: '⚠️ Heatmap verisi bulunamadı. Ses analizi yapılıyor (bu işlem uzun sürebilir)...',
+                        message: '⚠️ Heatmap verisi bulunamadı. Ses analizi yapılıyor (bu işlem uzun sürebilir 5-10 dk)...',
                         progress: 0
                     })
 
