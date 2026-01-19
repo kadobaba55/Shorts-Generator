@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 // Arguments: url, outputPath, cookiesPath
 const args = process.argv.slice(2);
@@ -11,9 +12,25 @@ if (args.length < 2) {
 
 const url = args[0];
 const outputPath = args[1];
-const cookiesPath = args[2];
+const initialCookiesPath = args[2];
 
-// Netscape cookie parser
+// Helper: Convert JSON cookies to Netscape format (required by yt-dlp)
+function jsonToNetscape(cookies) {
+    let netscape = '# Netscape HTTP Cookie File\n\n';
+    cookies.forEach(cookie => {
+        const domain = cookie.domain.startsWith('.') ? cookie.domain : '.' + cookie.domain;
+        const includeSubdomains = cookie.domain.startsWith('.') ? 'TRUE' : 'FALSE';
+        const path = cookie.path;
+        const secure = cookie.secure ? 'TRUE' : 'FALSE';
+        const expiry = cookie.expires === -1 ? 0 : Math.round(cookie.expires);
+        const name = cookie.name;
+        const value = cookie.value;
+        netscape += `${domain}\t${includeSubdomains}\t${path}\t${secure}\t${expiry}\t${name}\t${value}\n`;
+    });
+    return netscape;
+}
+
+// Netscape cookie parser (for importing initial cookies)
 function parseCookieFile(cookieContent) {
     const cookies = [];
     const lines = cookieContent.split('\n');
@@ -35,215 +52,150 @@ function parseCookieFile(cookieContent) {
     return cookies;
 }
 
-async function downloadVideo() {
+async function runHybridDownload() {
     let browser = null;
-    try {
-        console.log('Starting Playwright downloader script...');
+    let tempCookiePath = path.join(process.cwd(), `temp_cookies_${Date.now()}.txt`);
 
+    try {
+        console.log('🚀 Starting Hybrid Downloader (Playwright + yt-dlp)...');
+
+        // 1. Launch Playwright to harvest fresh cookies
         browser = await chromium.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-blink-features=AutomationControlled',
-                '--autoplay-policy=no-user-gesture-required'
-            ]
+            headless: true, // Use false if debugging is needed
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 },
-            locale: 'en-US',
-            timezoneId: 'America/New_York'
+            locale: 'en-US'
         });
 
-        if (cookiesPath && fs.existsSync(cookiesPath)) {
-            const cookieContent = fs.readFileSync(cookiesPath, 'utf-8');
-            const cookies = parseCookieFile(cookieContent);
-            if (cookies.length > 0) {
-                await context.addCookies(cookies);
-                console.log(`🍪 Loaded ${cookies.length} cookies`);
+        // Load initial cookies if provided (to maintain login state)
+        if (initialCookiesPath && fs.existsSync(initialCookiesPath)) {
+            try {
+                const content = fs.readFileSync(initialCookiesPath, 'utf-8');
+                const initialCookies = parseCookieFile(content);
+                if (initialCookies.length > 0) {
+                    await context.addCookies(initialCookies);
+                    console.log(`🍪 Loaded ${initialCookies.length} initial cookies.`);
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to load initial cookies:', e.message);
             }
         }
 
         const page = await context.newPage();
-        let streamUrl = null;
-        let streamHeaders = {};
 
-        // Network Interception
-        page.on('response', async (response) => {
-            const resUrl = response.url();
+        console.log(`� Navigating to ${url} to refresh cookies...`);
+        // We go to the embed URL first as it's lighter, then the actual video if needed. 
+        // Actually, going to the video page is better to trigger the specific consent/bot check for that video.
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-            // Check for potential video streams
-            if (resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) {
-                // Ignore stats/logging calls
-                if (resUrl.includes('generate_204')) return;
+        // Wait a bit for background requests (PO-Token, etc.) to settle
+        await page.waitForTimeout(5000);
 
-                // We now ACCEPT valid video streams even if they are UMP,
-                // because we are forwarding headers which should fix the download.
-                // if (resUrl.includes('vnd.yt-ump')) return; (REMOVED FILTER)
-
-                const headers = response.headers();
-                const contentLength = headers['content-length'];
-                const contentType = headers['content-type'] || '';
-                const status = response.status();
-
-                console.log(`📡 Candidate: ${resUrl.substring(0, 50)}... [${status}] [${contentType}]`);
-
-                if (streamUrl) return;
-
-                // Look for video/mp4, webm, or ump (now that we have headers)
-                const isVideo = contentType.startsWith('video/') || contentType.includes('application/vnd.yt-ump');
-                const isLarge = contentLength && parseInt(contentLength) > 100000; // >100KB (relaxed)
-
-                if (isVideo || isLarge) {
-                    console.log('✅ Stream found:', resUrl);
-                    streamUrl = resUrl;
-                    try { streamHeaders = await response.request().allHeaders(); } catch (e) { }
-                }
-            }
-        });
-
-        console.log(`Navigating to ${url}...`);
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-        // iPad Consent/Interactions
+        // Try to handle consent popup if it appears (simple version)
         try {
-            await page.waitForTimeout(2000);
-
-            // Try to click play if visible
-            const playSelectors = ['.ytp-large-play-button', '#player', 'button[aria-label="Play"]'];
-            for (const selector of playSelectors) {
-                if (await page.isVisible(selector)) {
-                    await page.click(selector);
-                    console.log('Clicked play button');
-                    await page.waitForTimeout(500);
-                    break;
-                }
+            const consentButton = await page.$('button[aria-label="Accept all"]');
+            if (consentButton) {
+                await consentButton.click();
+                await page.waitForTimeout(2000);
             }
+        } catch (e) { }
 
-            // Programmatic play fallback
-            await page.evaluate(() => {
-                const videos = document.querySelectorAll('video');
-                videos.forEach(v => { v.muted = true; v.play(); });
-            });
-
-        } catch (e) { /* ignore */ }
-
-        // Wait for Stream
-        let attempts = 0;
-        // Wait up to 20 seconds, checking every 500ms
-        while (!streamUrl && attempts < 40) {
-            await new Promise(r => setTimeout(r, 500));
-            attempts++;
-            if (attempts % 10 === 0) console.log('Waiting for stream...');
-        }
-
-        if (!streamUrl) {
-            const debugPath = path.join(process.cwd(), 'public', 'debug-script-playwright.png');
-            await page.screenshot({ path: debugPath });
-            console.error(`Stream not found. Screenshot saved to ${debugPath}`);
-            throw new Error('Video stream URL not found');
-        }
-
-        // Metadata
-        const title = await page.evaluate(() =>
-            document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata')?.textContent?.trim() || 'video'
-        );
-        const duration = await page.evaluate(() =>
-            document.querySelector('video')?.duration || 0
-        );
-
-        console.log(`Downloading stream: ${streamUrl}`);
-
-        console.log(`Downloading stream: ${streamUrl}`);
-
-        // Initialize empty file
-        fs.writeFileSync(outputPath, '');
-
-        // Define a function to receive chunks from the browser
-        // We accept base64 to ensure safe transfer of binary data across the bridge
-        await page.exposeFunction('saveChunk', (base64Chunk) => {
-            const buffer = Buffer.from(base64Chunk, 'base64');
-            fs.appendFileSync(outputPath, buffer);
-        });
-
-        // Download in browser context (chunked using Fetch API + Streams)
-        await page.evaluate(async ({ src, headers }) => {
-
-            // Filter headers to be safe
-            const safeHeaders = {};
-            const forbidden = ['host', 'connection', 'content-length', 'pragma', 'expect', 'user-agent', 'cookie', 'accept-encoding'];
-
-            for (const [key, value] of Object.entries(headers)) {
-                const lowerKey = key.toLowerCase();
-                // Filter out pseudo-headers (starting with :) and forbidden headers
-                if (!lowerKey.startsWith(':') && !forbidden.includes(lowerKey)) {
-                    safeHeaders[key] = value;
-                }
-            }
-
-            const res = await fetch(src, { headers: safeHeaders });
-            if (!res.ok) throw new Error('Fetch failed: ' + res.status);
-
-            if (!res.body) throw new Error('No body in response');
-
-            const reader = res.body.getReader();
-
-            const chunkToBase64 = (buffer) => {
-                let binary = '';
-                const bytes = new Uint8Array(buffer);
-                const len = bytes.byteLength;
-                for (let i = 0; i < len; i++) {
-                    binary += String.fromCharCode(bytes[i]);
-                }
-                return btoa(binary);
-            };
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                // value is Uint8Array
-                // Convert to base64 to send to Node.js
-                // Note: btoa might fail on huge chunks, but stream chunks are usually reasonable
-                const base64 = chunkToBase64(value);
-                await window.saveChunk(base64);
-            }
-        }, { src: streamUrl, headers: streamHeaders });
+        // 2. Export Fresh Cookies
+        const freshCookies = await context.cookies();
+        const netscapeCookies = jsonToNetscape(freshCookies);
+        fs.writeFileSync(tempCookiePath, netscapeCookies);
+        console.log(`✅ Harvested ${freshCookies.length} fresh cookies. Saved to ${tempCookiePath}`);
 
         await browser.close();
         browser = null;
 
-        const fileSize = fs.statSync(outputPath).size;
-        console.log(`Download complete. Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+        // 3. Execute yt-dlp with fresh cookies
+        console.log('⬇️ Starting yt-dlp download...');
 
-        // Check file validity
-        if (fileSize < 1000) {
-            try {
-                const smallContent = fs.readFileSync(outputPath, 'utf-8');
-                console.log('⚠️ Small file content:', smallContent);
-            } catch (e) { }
-            throw new Error('Downloaded file is too small (<1KB)');
+        // Ensure outputPath directory exists
+        const outputDir = path.dirname(outputPath);
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+        // Construct yt-dlp command
+        // -N 4: split into 4 threads (faster)
+        // --cookies: use our fresh cookies
+
+        let ytDlpExecutable = 'yt-dlp'; // Default to global command
+        const isWin = process.platform === 'win32';
+        const localBinName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+        const localPath = path.join(__dirname, localBinName);
+
+        if (fs.existsSync(localPath)) {
+            ytDlpExecutable = localPath;
+            console.log(`Using local yt-dlp at: ${ytDlpExecutable}`);
+        } else {
+            console.log('Using global system yt-dlp');
         }
 
-        // Output result as JSON for the parent process
-        console.log(JSON.stringify({
-            success: true,
-            title,
-            duration,
-            filePath: outputPath,
-            fileSize
-        }));
+        const ytDlp = spawn(ytDlpExecutable, [
+            '--cookies', tempCookiePath,
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '-o', outputPath,
+            '--no-playlist',
+            '--force-overwrites', // Overwrite 0KB files if any
+            url
+        ]);
+
+        ytDlp.stdout.on('data', (data) => {
+            console.log(`[yt-dlp]: ${data.toString().trim()}`);
+        });
+
+        ytDlp.stderr.on('data', (data) => {
+            console.error(`[yt-dlp err]: ${data.toString().trim()}`);
+        });
+
+        ytDlp.on('close', (code) => {
+            // Cleanup cookie file
+            if (fs.existsSync(tempCookiePath)) {
+                fs.unlinkSync(tempCookiePath);
+            }
+
+            if (code === 0) {
+                console.log('✅ Download completed successfully!');
+
+                // Validate file size
+                try {
+                    const stats = fs.statSync(outputPath);
+                    console.log(`File size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+
+                    if (stats.size < 1000) {
+                        console.log(JSON.stringify({ success: false, error: "Downloaded file is too small." }));
+                        process.exit(1);
+                    }
+
+                    console.log(JSON.stringify({
+                        success: true,
+                        filePath: outputPath,
+                        fileSize: stats.size
+                    }));
+                    process.exit(0);
+
+                } catch (e) {
+                    console.log(JSON.stringify({ success: false, error: "File not found after download." }));
+                    process.exit(1);
+                }
+            } else {
+                console.log(JSON.stringify({ success: false, error: `yt-dlp exited with code ${code}` }));
+                process.exit(1);
+            }
+        });
 
     } catch (error) {
-        console.error('Script Error:', error);
-        console.log(JSON.stringify({
-            success: false,
-            error: error.message
-        }));
+        console.error('❌ Script Error:', error);
         if (browser) await browser.close();
+        if (fs.existsSync(tempCookiePath)) fs.unlinkSync(tempCookiePath);
+
+        console.log(JSON.stringify({ success: false, error: error.message }));
         process.exit(1);
     }
 }
 
-downloadVideo();
+runHybridDownload();
