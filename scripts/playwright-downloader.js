@@ -1,228 +1,169 @@
 const { chromium } = require('playwright');
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
 
-// Arguments: url, outputPath, cookiesPath
+// Helper to handle arguments (URL is required)
 const args = process.argv.slice(2);
-if (args.length < 2) {
-    console.error('Usage: node playwright-downloader.js <url> <outputPath> [cookiesPath]');
+if (args.length < 1) {
+    console.error(JSON.stringify({ error: 'Usage: node playwright-downloader.js <url>' }));
     process.exit(1);
 }
 
-const url = args[0];
-const outputPath = args[1];
-const initialCookiesPath = args[2];
+const targetUrl = args[0];
 
-// Helper: Convert JSON cookies to Netscape format (required by yt-dlp)
-function jsonToNetscape(cookies) {
-    let netscape = '# Netscape HTTP Cookie File\n\n';
-    cookies.forEach(cookie => {
-        const domain = cookie.domain.startsWith('.') ? cookie.domain : '.' + cookie.domain;
-        const includeSubdomains = cookie.domain.startsWith('.') ? 'TRUE' : 'FALSE';
-        const path = cookie.path;
-        const secure = cookie.secure ? 'TRUE' : 'FALSE';
-        const expiry = cookie.expires === -1 ? 0 : Math.round(cookie.expires);
-        const name = cookie.name;
-        const value = cookie.value;
-        netscape += `${domain}\t${includeSubdomains}\t${path}\t${secure}\t${expiry}\t${name}\t${value}\n`;
-    });
-    return netscape;
-}
-
-// Netscape cookie parser (for importing initial cookies)
-function parseCookieFile(cookieContent) {
-    const cookies = [];
-    const lines = cookieContent.split('\n');
-    for (const line of lines) {
-        if (line.startsWith('#') || line.trim() === '') continue;
-        const parts = line.split('\t');
-        if (parts.length >= 7) {
-            const [domain, , path, secure, expires, name, value] = parts;
-            cookies.push({
-                name: name.trim(),
-                value: value.trim(),
-                domain: domain.startsWith('.') ? domain : `.${domain}`,
-                path: path || '/',
-                secure: secure.toLowerCase() === 'true',
-                expires: parseInt(expires) || -1
-            });
-        }
-    }
-    return cookies;
-}
-
-async function runHybridDownload() {
+(async () => {
     let browser = null;
-    let tempCookiePath = path.join(process.cwd(), `temp_cookies_${Date.now()}.txt`);
-
     try {
-        console.log('🚀 Starting Hybrid Downloader (TV Mode)...');
-
-        // 1. Launch Playwright to harvest fresh cookies
+        // 1. Setup Playwright (Chromium) - Headless server configuration
         browser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            headless: true, // Server-safe
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled', // Stealth
+                '--autoplay-policy=no-user-gesture-required',
+                '--disable-web-security'
+            ]
         });
 
-        // Use TV User-Agent
-        const userAgent = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/537.3 (KHTML, like Gecko) SamsungBrowser/2.2 Chrome/63.0.3239.84 TV Safari/537.3';
-
+        // 2. Configure Context - Stealth & Mobile/Desktop Hybrid for best streams
+        // Using a standard modern Desktop UA to avoid mobile redirection oddities but ensuring capability
         const context = await browser.newContext({
-            userAgent: userAgent,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
             locale: 'en-US',
-            viewport: { width: 1920, height: 1080 }
+            deviceScaleFactor: 1,
+            permissions: ['autoplay']
         });
-
-        // Load initial cookies if provided
-        if (initialCookiesPath && fs.existsSync(initialCookiesPath)) {
-            try {
-                const content = fs.readFileSync(initialCookiesPath, 'utf-8');
-                const initialCookies = parseCookieFile(content);
-                if (initialCookies.length > 0) {
-                    await context.addCookies(initialCookies);
-                    console.log(`🍪 Loaded ${initialCookies.length} initial cookies.`);
-                }
-            } catch (e) {
-                console.warn('⚠️ Failed to load initial cookies:', e.message);
-            }
-        }
 
         const page = await context.newPage();
 
-        console.log(`📺 Navigating to ${url} as Smart TV...`);
-        // TV interface might be heavier, give it time
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        // 3. Network Interception Logic
+        const capturedStreams = {
+            video: null,
+            audio: null,
+            expiresAt: null
+        };
 
-        await page.waitForTimeout(5000);
+        // Intercept requests to find actual media streams
+        page.on('request', request => {
+            const url = request.url();
 
-        // Try to click consent if it appears (TV UI might differ but worth a shot)
-        try {
-            const consentButton = await page.$('button[aria-label="Accept all"]');
-            if (consentButton) await consentButton.click();
-        } catch (e) { }
+            // Filter for YouTube's video playback endpoints
+            if (url.includes('videoplayback')) {
+                const resourceType = request.resourceType();
+                // We typically look for XHR/Fetch or Media types
+                if (resourceType === 'xhr' || resourceType === 'fetch' || resourceType === 'media') {
 
-        // 2. Export Fresh Cookies
-        const freshCookies = await context.cookies();
-        const netscapeCookies = jsonToNetscape(freshCookies);
-        fs.writeFileSync(tempCookiePath, netscapeCookies);
-        console.log(`✅ Harvested ${freshCookies.length} fresh cookies.`);
+                    // Decode URL params to check mime types
+                    // URLs are often like: ...&mime=video%2Fmp4...
+                    const decodedUrl = decodeURIComponent(url);
 
-        await browser.close();
-        browser = null;
+                    // Capture Expiry if possible (expire=...)
+                    if (!capturedStreams.expiresAt) {
+                        const expireMatch = decodedUrl.match(/expire=(\d+)/);
+                        if (expireMatch) {
+                            capturedStreams.expiresAt = parseInt(expireMatch[1]);
+                        }
+                    }
 
-        // 3. Execute yt-dlp with TV client settings
-        console.log('⬇️ Starting yt-dlp download (TV Client)...');
+                    // Strategically select best streams
+                    if (decodedUrl.includes('mime=video/mp4') && !capturedStreams.video) {
+                        // Avoid low-quality partials if possible, but for SABR any valid stream is a win
+                        capturedStreams.video = url;
+                        // console.error('[Debug] Found Video Stream');
+                    }
 
-        // Ensure outputPath directory exists
-        const outputDir = path.dirname(outputPath);
-        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-        // Check/Download local yt-dlp binary
-        let ytDlpExecutable = 'yt-dlp';
-        const isWin = process.platform === 'win32';
-        const localBinName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
-        const localPath = path.join(__dirname, localBinName);
-
-        if (fs.existsSync(localPath)) {
-            ytDlpExecutable = localPath;
-            console.log(`Using local yt-dlp at: ${ytDlpExecutable}`);
-        } else {
-            console.log('Local yt-dlp not found. Attempting to download latest version...');
-            try {
-                const downloadUrl = isWin
-                    ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
-                    : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
-
-                const res = await fetch(downloadUrl);
-                if (!res.ok) throw new Error(`Failed to download yt-dlp: ${res.statusText}`);
-
-                const arrayBuffer = await res.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-                fs.writeFileSync(localPath, buffer);
-
-                if (!isWin) {
-                    fs.chmodSync(localPath, '755');
+                    if (decodedUrl.includes('mime=audio/mp4') && !capturedStreams.audio) {
+                        capturedStreams.audio = url;
+                        // console.error('[Debug] Found Audio Stream');
+                    }
                 }
+            }
+        });
 
-                console.log(`✅ Downloaded yt-dlp to ${localPath}`);
-                ytDlpExecutable = localPath;
-            } catch (e) {
-                console.error('⚠️ Failed to download local yt-dlp:', e.message);
-                console.log('Falling back to global system yt-dlp');
+        // 4. Navigate and Trigger Playback
+        // console.error(`[Debug] Navigating to ${targetUrl}`);
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        // Attempt to bypass consent modals efficiently
+        const consentSelectors = [
+            'button[aria-label="Accept all"]',
+            'button[aria-label="Agree to the use of cookies and other data for the purposes described"]',
+            '.yt-spec-button-shape-next--filled.yt-spec-button-shape-next--call-to-action'
+        ];
+
+        for (const selector of consentSelectors) {
+            try {
+                const btn = await page.$(selector);
+                if (btn && await btn.isVisible()) {
+                    await btn.click();
+                    await page.waitForTimeout(500); // Short grace period
+                }
+            } catch (e) { }
+        }
+
+        // Wait for video element
+        await page.waitForSelector('video', { timeout: 15000 });
+
+        // Programmatic play trigger (ensure SABR starts)
+        await page.evaluate(async () => {
+            const video = document.querySelector('video');
+            if (video) {
+                if (video.paused) {
+                    await video.play();
+                }
+                // Force a seek to ensure buffering starts
+                video.currentTime = 0.1;
+            }
+        });
+
+        // 5. Wait for streams to be captured
+        // We poll briefly until we have both or timeout
+        let attempts = 0;
+        const maxAttempts = 20; // 20 * 500ms = 10 seconds max wait after load
+
+        while ((!capturedStreams.video || !capturedStreams.audio) && attempts < maxAttempts) {
+            await page.waitForTimeout(500);
+            attempts++;
+
+            // Re-trigger play if still failing
+            if (attempts % 5 === 0) {
+                await page.evaluate(() => {
+                    const video = document.querySelector('video');
+                    if (video && video.paused) video.play();
+                });
             }
         }
 
-        // Use TV client args
-        const extractorArgs = 'youtube:player_client=tv';
-
-        const ytDlpArgs = [
-            '--cookies', tempCookiePath,
-            '--user-agent', userAgent,
-            '--extractor-args', extractorArgs,
-            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            '-o', outputPath,
-            '--no-playlist',
-            '--force-overwrites',
-            url
-        ];
-
-        const ytDlp = spawn(ytDlpExecutable, ytDlpArgs);
-
-        let stderrOutput = '';
-
-        ytDlp.stdout.on('data', (data) => {
-            console.log(`[yt-dlp]: ${data.toString().trim()}`);
-        });
-
-        ytDlp.stderr.on('data', (data) => {
-            const msg = data.toString().trim();
-            stderrOutput += msg + '\n';
-            console.error(`[yt-dlp err]: ${msg}`);
-        });
-
-        ytDlp.on('close', (code) => {
-            // Cleanup cookie file
-            if (fs.existsSync(tempCookiePath)) {
-                fs.unlinkSync(tempCookiePath);
-            }
-
-            if (code === 0) {
-                console.log('✅ Download completed successfully!');
-                try {
-                    const stats = fs.statSync(outputPath);
-                    console.log(`File size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-
-                    if (stats.size < 1000) {
-                        console.log(JSON.stringify({ success: false, error: "Downloaded file is too small." }));
-                        process.exit(1);
-                    }
-
-                    console.log(JSON.stringify({
-                        success: true,
-                        filePath: outputPath,
-                        fileSize: stats.size
-                    }));
-                    process.exit(0);
-
-                } catch (e) {
-                    console.log(JSON.stringify({ success: false, error: "File not found after download." }));
-                    process.exit(1);
-                }
-            } else {
-                console.log(JSON.stringify({ success: false, error: `yt-dlp exited with code ${code}`, details: stderrOutput }));
-                process.exit(1);
-            }
-        });
+        // 6. Return Result
+        if (capturedStreams.video) {
+            // Success
+            console.log(JSON.stringify({
+                success: true,
+                videoUrl: capturedStreams.video,
+                audioUrl: capturedStreams.audio, // Might be null if embedded in video or missed
+                expiresAt: capturedStreams.expiresAt
+            }));
+        } else {
+            // Failure
+            console.log(JSON.stringify({
+                success: false,
+                error: 'Timeout waiting for media streams',
+                details: 'Could not intercept valid googlevideo.com/videoplayback requests'
+            }));
+            process.exit(1);
+        }
 
     } catch (error) {
-        console.error('❌ Script Error:', error);
-        if (browser) await browser.close();
-        if (fs.existsSync(tempCookiePath)) fs.unlinkSync(tempCookiePath);
-
-        console.log(JSON.stringify({ success: false, error: error.message }));
+        // Graceful Failure
+        console.log(JSON.stringify({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        }));
         process.exit(1);
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
-}
-
-runHybridDownload();
+})();
