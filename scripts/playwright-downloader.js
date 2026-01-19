@@ -51,12 +51,8 @@ async function downloadVideo() {
         });
 
         const context = await browser.newContext({
-            // Emulate iPhone 12
-            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
-            viewport: { width: 390, height: 844 },
-            deviceScaleFactor: 3,
-            isMobile: true,
-            hasTouch: true,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
             locale: 'en-US',
             timezoneId: 'America/New_York'
         });
@@ -73,31 +69,40 @@ async function downloadVideo() {
         const page = await context.newPage();
         let streamUrl = null;
 
+        // Use Embed URL for simpler player and standard streams
+        const videoId = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)?.[1];
+        const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+
+        console.log(`Navigating to Embed URL: ${embedUrl}`);
+
+
         // Network Interception
         page.on('response', (response) => {
             const resUrl = response.url();
 
             // Check for potential video streams
             if (resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) {
-                // Ignore stats/logging calls and UMP streams
-                if (resUrl.includes('generate_204') || resUrl.includes('vnd.yt-ump')) return;
+                // Ignore stats/logging calls
+                if (resUrl.includes('generate_204')) return;
 
-                // On mobile, MP4 stream often doesn't have 'videoplayback' in URL sometimes, but usually does.
-                // It might come as 'videoplayback' with content-type video/mp4
+                // IGNORE UMP streams strictly now, trying to force MP4 from embed
+                if (resUrl.includes('vnd.yt-ump')) return;
 
                 const headers = response.headers();
                 const contentLength = headers['content-length'];
                 const contentType = headers['content-type'] || '';
                 const status = response.status();
 
-                // Log candidates
-                console.log(`📡 Candidate: ${resUrl.substring(0, 50)}... [${status}] [${contentType}] [${contentLength}]`);
+                console.log(`📡 Candidate: ${resUrl.substring(0, 50)}... [${status}] [${contentType}]`);
 
                 if (streamUrl) return;
 
-                // Strict filters for mobile: expect video/mp4 or video/webm
-                const isVideo = contentType.startsWith('video/') && !contentType.includes('application/vnd');
-                const isLarge = contentLength && parseInt(contentLength) > 1000000; // >1MB
+                // Heuristic:
+                // 1. Content-type starts with video/
+                // 2. OR Content-length > 500KB
+
+                const isVideo = contentType.startsWith('video/');
+                const isLarge = contentLength && parseInt(contentLength) > 500000;
 
                 if (isVideo || isLarge) {
                     console.log('✅ Stream found:', resUrl);
@@ -106,43 +111,29 @@ async function downloadVideo() {
             }
         });
 
-        console.log(`Navigating to ${url}...`);
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Mobile Consent Popup
+        // Handle Popups (Embed usually has fewer)
         try {
-            await page.waitForTimeout(2000); // Wait for potential popup
-            const consentSelectors = [
-                'button.eom-button-row:nth-child(1)', // Accept all on mobile?
-                '[aria-label="Accept all"]',
-                '.yt-spec-button-shape-next--filled',
-                'ytm-button-renderer.eom-reject'
-            ];
+            await page.waitForTimeout(2000);
+            const consentSelectors = ['button[aria-label="Accept all"]', '.ytp-large-play-button'];
             for (const selector of consentSelectors) {
                 if (await page.isVisible(selector)) {
                     await page.click(selector);
-                    console.log('🍪 Consent handled');
                     await page.waitForTimeout(1000);
-                    break;
                 }
             }
         } catch (e) { /* ignore */ }
 
-        // Trigger Playback (Mobile)
+        // Trigger Playback (Embed)
         try {
-            console.log('Interacting with video player...');
-            const playerSelector = '#player-container-id, #player, .html5-video-player';
-            await page.waitForSelector(playerSelector, { timeout: 10000 });
-            await page.click(playerSelector);
-
-            // Explicitly tap the video element if it exists
-            setTimeout(async () => {
-                await page.evaluate(() => {
-                    const v = document.querySelector('video');
-                    if (v) { v.muted = true; v.play(); }
-                });
-            }, 1000);
-
+            console.log('Interacting with embed player...');
+            const playButton = '.ytp-large-play-button';
+            if (await page.isVisible(playButton)) {
+                await page.click(playButton);
+            } else {
+                await page.click('body'); // Click anywhere to trigger autoplay policies
+            }
         } catch (e) {
             console.warn('Playback trigger warning:', e.message);
         }
