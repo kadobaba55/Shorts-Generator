@@ -138,9 +138,6 @@ async function runHybridDownload() {
         // 3. Extract PO Token (Proof of Origin)
         // This is critical for the "web" client to work without being blocked.
         // We try to find it in the ytcfg global object or intercept it.
-        let poToken = null;
-        let visitorData = null;
-
         try {
             const result = await page.evaluate(() => {
                 let token = null;
