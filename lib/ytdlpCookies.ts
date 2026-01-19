@@ -43,6 +43,8 @@ export function saveCookies(cookiesContent: string): void {
     fs.writeFileSync(COOKIES_PATH, cookiesContent, 'utf-8')
 }
 
+import { downloadWithPlaywright } from './playwrightDownloader'
+
 /**
  * Download video using Playwright (primary) or yt-dlp (fallback)
  */
@@ -56,7 +58,6 @@ export async function downloadWithCookies(
     try {
         onProgress?.(5, 'Playwright ile indiriliyor...')
 
-        const { downloadWithPlaywright } = require('./playwrightDownloader')
         const result = await downloadWithPlaywright(url, outputPath, onProgress)
 
         if (result.success) {
