@@ -74,8 +74,8 @@ export async function downloadWithPlaywright(
                         error: `İşlem başarısız (Exit code: ${code}). Hata: ${stderrData.slice(-200)}`
                     })
                 }
-            } catch (e) {
-                resolve({ success: false, error: 'Çıktı okunamadı: ' + e.message })
+            } catch (e: any) {
+                resolve({ success: false, error: 'Çıktı okunamadı: ' + (e?.message || String(e)) })
             }
         })
     })
