@@ -176,7 +176,9 @@ async function downloadVideo() {
             const forbidden = ['host', 'connection', 'content-length', 'pragma', 'expect', 'user-agent', 'cookie', 'accept-encoding'];
 
             for (const [key, value] of Object.entries(headers)) {
-                if (!forbidden.includes(key.toLowerCase())) {
+                const lowerKey = key.toLowerCase();
+                // Filter out pseudo-headers (starting with :) and forbidden headers
+                if (!lowerKey.startsWith(':') && !forbidden.includes(lowerKey)) {
                     safeHeaders[key] = value;
                 }
             }
