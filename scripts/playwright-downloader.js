@@ -66,7 +66,12 @@ async function runHybridDownload() {
         });
 
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            // Match the User-Agent used in yt-dlp (Mobile Chrome)
+            userAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+            viewport: { width: 412, height: 915 },
+            deviceScaleFactor: 2.625,
+            isMobile: true,
+            hasTouch: true,
             locale: 'en-US'
         });
 
@@ -159,12 +164,20 @@ async function runHybridDownload() {
             }
         }
 
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+        // Use Mobile User-Agent for mweb client
+        const userAgent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36';
+
+        // Re-launch browser with Mobile UA if it was different? 
+        // Actually, we should set this at the start. 
+        // For now, let's keep the browser creation logic at the top, but we need to ensure they match.
+        // We will update the browser context creation above in the next edit. 
+        // HERE we just define the args matching the UA we WILL use.
 
         const ytDlpArgs = [
             '--cookies', tempCookiePath,
             '--user-agent', userAgent,
-            '--extractor-args', 'youtube:player_client=android',
+            // Use Mobile Web client - supports cookies AND often bypasses desktop throttling
+            '--extractor-args', 'youtube:player_client=mweb',
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', outputPath,
             '--no-playlist',
