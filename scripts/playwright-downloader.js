@@ -185,53 +185,45 @@ async function downloadVideo() {
 
         console.log(`Downloading stream: ${streamUrl}`);
 
-        // Get cookies from context to use in Node.js fetch
-        const cookies = await context.cookies();
-        const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+        // Initialize empty file
+        fs.writeFileSync(outputPath, '');
 
-        // Use browser User-Agent
-        const userAgent = await page.evaluate(() => navigator.userAgent);
+        // Define a function to receive chunks from the browser
+        // We accept base64 to ensure safe transfer of binary data across the bridge
+        await page.exposeFunction('saveChunk', (base64Chunk) => {
+            const buffer = Buffer.from(base64Chunk, 'base64');
+            fs.appendFileSync(outputPath, buffer);
+        });
 
-        // Download in Node.js context (streaming) handles large files properly
-        // Check if fetch is available (Node 18+) or fallback to http/https
-        let response;
-        if (typeof fetch !== 'undefined') {
-            response = await fetch(streamUrl, {
-                headers: {
-                    'Cookie': cookieHeader,
-                    'User-Agent': userAgent,
-                    'Referer': 'https://www.youtube.com/',
-                    'Origin': 'https://www.youtube.com'
+        // Download in browser context (chunked using Fetch API + Streams)
+        await page.evaluate(async (src) => {
+            const res = await fetch(src);
+            if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+
+            if (!res.body) throw new Error('No body in response');
+
+            const reader = res.body.getReader();
+
+            const chunkToBase64 = (buffer) => {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                const len = bytes.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(bytes[i]);
                 }
-            });
+                return btoa(binary);
+            };
 
-            if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
-
-            // Create write stream
-            const fileStream = fs.createWriteStream(outputPath);
-
-            // Stream to file
-            // Node 18+ Web Streams to Node Streams
-            if (response.body) {
-                const { Readable } = require('stream');
-                // create readable stream from web stream
-                // @ts-ignore
-                const readableWebStream = Readable.fromWeb(response.body);
-
-                await new Promise((resolve, reject) => {
-                    readableWebStream.pipe(fileStream);
-                    readableWebStream.on('error', reject);
-                    fileStream.on('finish', resolve);
-                    fileStream.on('error', reject);
-                });
-            } else {
-                throw new Error('No response body');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                // value is Uint8Array
+                // Convert to base64 to send to Node.js
+                // Note: btoa might fail on huge chunks, but stream chunks are usually reasonable
+                const base64 = chunkToBase64(value);
+                await window.saveChunk(base64);
             }
-
-        } else {
-            // Fallback for older Node (though Next 14 uses Node 18+)
-            throw new Error('Node.js version too old, fetch API required');
-        }
+        }, streamUrl);
 
         await browser.close();
         browser = null;
@@ -239,7 +231,7 @@ async function downloadVideo() {
         const fileSize = fs.statSync(outputPath).size;
         console.log(`Download complete. Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
-        // Check file validity locally if possible?
+        // Check file validity
         if (fileSize < 1000) {
             try {
                 const smallContent = fs.readFileSync(outputPath, 'utf-8');
