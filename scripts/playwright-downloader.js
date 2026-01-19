@@ -51,10 +51,15 @@ async function downloadVideo() {
         });
 
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 },
+            // Emulate iPhone 12
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
+            viewport: { width: 390, height: 844 },
+            deviceScaleFactor: 3,
+            isMobile: true,
+            hasTouch: true,
             locale: 'en-US',
-            timezoneId: 'America/New_York'
+            timezoneId: 'America/New_York',
+            permissions: ['autoplay']
         });
 
         if (cookiesPath && fs.existsSync(cookiesPath)) {
@@ -75,30 +80,27 @@ async function downloadVideo() {
 
             // Check for potential video streams
             if (resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) {
-                // Ignore stats/logging calls
-                if (resUrl.includes('generate_204')) return;
+                // Ignore stats/logging calls and UMP streams
+                if (resUrl.includes('generate_204') || resUrl.includes('vnd.yt-ump')) return;
+
+                // On mobile, MP4 stream often doesn't have 'videoplayback' in URL sometimes, but usually does.
+                // It might come as 'videoplayback' with content-type video/mp4
 
                 const headers = response.headers();
                 const contentLength = headers['content-length'];
                 const contentType = headers['content-type'] || '';
                 const status = response.status();
 
-                // Log all candidates for debugging
-                console.log(`📡 Network candidate: ${resUrl.substring(0, 50)}... [Status: ${status}, Type: ${contentType}, Size: ${contentLength}]`);
+                // Log candidates
+                console.log(`📡 Candidate: ${resUrl.substring(0, 50)}... [${status}] [${contentType}] [${contentLength}]`);
 
-                if (streamUrl) return; // Already found one
+                if (streamUrl) return;
 
-                // Heuristic:
-                // 1. Content-type starts with video/
-                // 2. OR Content-length > 500KB
-                // 3. OR Transfer-encoding is chunked
-                // 4. OR Content-type is 'application/vnd.yt-ump' (New YouTube format)
+                // Strict filters for mobile: expect video/mp4 or video/webm
+                const isVideo = contentType.startsWith('video/') && !contentType.includes('application/vnd');
+                const isLarge = contentLength && parseInt(contentLength) > 1000000; // >1MB
 
-                const isVideoType = contentType.startsWith('video/') || contentType.includes('application/vnd.yt-ump');
-                const isLargeEnough = contentLength && parseInt(contentLength) > 500000;
-                const isChunked = headers['transfer-encoding'] === 'chunked';
-
-                if (isVideoType || isLargeEnough || isChunked) {
+                if (isVideo || isLarge) {
                     console.log('✅ Stream found:', resUrl);
                     streamUrl = resUrl;
                 }
@@ -108,53 +110,42 @@ async function downloadVideo() {
         console.log(`Navigating to ${url}...`);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Handle Popups
+        // Mobile Consent Popup
         try {
+            await page.waitForTimeout(2000); // Wait for potential popup
             const consentSelectors = [
-                'button[aria-label="Accept all"]',
-                'button[aria-label="Reject all"]',
-                '.eom-button-row button',
-                '#content .ytd-consent-bump-v2-lightbox button',
-                'yt-button-renderer#button' // Generic button often used in popups
+                'button.eom-button-row:nth-child(1)', // Accept all on mobile?
+                '[aria-label="Accept all"]',
+                '.yt-spec-button-shape-next--filled',
+                'ytm-button-renderer.eom-reject'
             ];
             for (const selector of consentSelectors) {
-                if (await page.$(selector)) {
+                if (await page.isVisible(selector)) {
                     await page.click(selector);
-                    console.log('🍪 Consent popup handled');
+                    console.log('🍪 Consent handled');
                     await page.waitForTimeout(1000);
                     break;
                 }
             }
         } catch (e) { /* ignore */ }
 
-        // Start Playback - More Aggressive
+        // Trigger Playback (Mobile)
         try {
-            console.log('Attempting to force playback...');
+            console.log('Interacting with video player...');
+            const playerSelector = '#player-container-id, #player, .html5-video-player';
+            await page.waitForSelector(playerSelector, { timeout: 10000 });
+            await page.click(playerSelector);
 
-            // 1. Click overlay buttons
-            const playButtonSelectors = ['.ytp-large-play-button', 'button[aria-label="Play"]', '.ytp-play-button'];
-            for (const selector of playButtonSelectors) {
-                if (await page.isVisible(selector)) {
-                    await page.click(selector);
-                    await page.waitForTimeout(500);
-                }
-            }
+            // Explicitly tap the video element if it exists
+            setTimeout(async () => {
+                await page.evaluate(() => {
+                    const v = document.querySelector('video');
+                    if (v) { v.muted = true; v.play(); }
+                });
+            }, 1000);
 
-            // 2. Click video element
-            await page.waitForSelector('video', { timeout: 10000 });
-            await page.click('video');
-
-            // 3. Programmatic play
-            await page.evaluate(() => {
-                const video = document.querySelector('video');
-                if (video) {
-                    video.muted = true;
-                    video.play().catch(e => console.error(e));
-                    video.currentTime = 0;
-                }
-            });
         } catch (e) {
-            console.warn('Playback force warning:', e.message);
+            console.warn('Playback trigger warning:', e.message);
         }
 
         // Wait for Stream
