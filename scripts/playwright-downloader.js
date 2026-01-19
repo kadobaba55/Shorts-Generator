@@ -66,16 +66,11 @@ async function runHybridDownload() {
         });
 
         const context = await browser.newContext({
-            // Match the User-Agent used in yt-dlp (Mobile Chrome)
-            userAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
-            viewport: { width: 412, height: 915 },
-            deviceScaleFactor: 2.625,
-            isMobile: true,
-            hasTouch: true,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             locale: 'en-US'
         });
 
-        // Load initial cookies if provided (to maintain login state)
+        // Load initial cookies if provided
         if (initialCookiesPath && fs.existsSync(initialCookiesPath)) {
             try {
                 const content = fs.readFileSync(initialCookiesPath, 'utf-8');
@@ -91,21 +86,47 @@ async function runHybridDownload() {
 
         const page = await context.newPage();
 
-        console.log(`� Navigating to ${url} to refresh cookies...`);
-        // We go to the embed URL first as it's lighter, then the actual video if needed. 
-        // Actually, going to the video page is better to trigger the specific consent/bot check for that video.
+        // 🔍 Intercept PO Token & Visitor Data
+        let poToken = null;
+        let visitorData = null;
+
+        await page.route('**/youtubei/v1/player*', async (route) => {
+            const request = route.request();
+            if (request.method() === 'POST') {
+                try {
+                    const postData = request.postDataJSON();
+
+                    // Extract Visitor Data
+                    if (postData.context?.client?.visitorData) {
+                        visitorData = postData.context.client.visitorData;
+                        console.log(`🔍 Intercepted Visitor Data from Network: ${visitorData.substring(0, 15)}...`);
+                    }
+
+                    // Extract PO Token (serviceIntegrityDimensions)
+                    if (postData.serviceIntegrityDimensions?.poToken) {
+                        poToken = postData.serviceIntegrityDimensions.poToken;
+                        console.log(`💎 Intercepted PO Token from Network: ${poToken.substring(0, 15)}...`);
+                    }
+                } catch (e) { }
+            }
+            route.continue();
+        });
+
+        console.log(` Navigating to ${url} to refresh cookies & capture tokens...`);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-        // Wait a bit for background requests (PO-Token, etc.) to settle
-        await page.waitForTimeout(5000);
+        // Wait specifically for the player request to fire
+        try {
+            await page.waitForResponse(resp => resp.url().includes('/youtubei/v1/player'), { timeout: 10000 });
+        } catch (e) {
+            console.log('⚠️ Player request timeout, proceeding with what we have...');
+        }
 
-        // Try to handle consent popup if it appears (simple version)
+        await page.waitForTimeout(3000);
+
         try {
             const consentButton = await page.$('button[aria-label="Accept all"]');
-            if (consentButton) {
-                await consentButton.click();
-                await page.waitForTimeout(2000);
-            }
+            if (consentButton) await consentButton.click();
         } catch (e) { }
 
         // 2. Export Fresh Cookies
