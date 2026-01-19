@@ -58,8 +58,7 @@ async function downloadVideo() {
             isMobile: true,
             hasTouch: true,
             locale: 'en-US',
-            timezoneId: 'America/New_York',
-            permissions: ['autoplay']
+            timezoneId: 'America/New_York'
         });
 
         if (cookiesPath && fs.existsSync(cookiesPath)) {
