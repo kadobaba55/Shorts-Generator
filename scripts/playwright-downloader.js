@@ -241,6 +241,10 @@ async function downloadVideo() {
 
         // Check file validity locally if possible?
         if (fileSize < 1000) {
+            try {
+                const smallContent = fs.readFileSync(outputPath, 'utf-8');
+                console.log('⚠️ Small file content:', smallContent);
+            } catch (e) { }
             throw new Error('Downloaded file is too small (<1KB)');
         }
 
@@ -262,7 +266,6 @@ async function downloadVideo() {
         if (browser) await browser.close();
         process.exit(1);
     }
-}
 }
 
 downloadVideo();
