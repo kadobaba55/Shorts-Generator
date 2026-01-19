@@ -75,21 +75,26 @@ async function downloadVideo() {
 
             // Check for potential video streams
             if (resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) {
+                // Ignore stats/logging calls
+                if (resUrl.includes('generate_204')) return;
+
                 const headers = response.headers();
                 const contentLength = headers['content-length'];
-                const contentType = headers['content-type'];
+                const contentType = headers['content-type'] || '';
+                const status = response.status();
 
                 // Log all candidates for debugging
-                console.log(`📡 Network candidate: ${resUrl.substring(0, 100)}... [Type: ${contentType}, Size: ${contentLength}]`);
+                console.log(`📡 Network candidate: ${resUrl.substring(0, 50)}... [Status: ${status}, Type: ${contentType}, Size: ${contentLength}]`);
 
                 if (streamUrl) return; // Already found one
 
                 // Heuristic:
                 // 1. Content-type starts with video/
-                // 2. OR Content-length > 500KB (relaxed from 1MB)
-                // 3. OR Transfer-encoding is chunked (no content-length)
+                // 2. OR Content-length > 500KB
+                // 3. OR Transfer-encoding is chunked
+                // 4. OR Content-type is 'application/vnd.yt-ump' (New YouTube format)
 
-                const isVideoType = contentType && contentType.startsWith('video/');
+                const isVideoType = contentType.startsWith('video/') || contentType.includes('application/vnd.yt-ump');
                 const isLargeEnough = contentLength && parseInt(contentLength) > 500000;
                 const isChunked = headers['transfer-encoding'] === 'chunked';
 
