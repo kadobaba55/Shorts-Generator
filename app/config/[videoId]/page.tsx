@@ -14,7 +14,7 @@ import {
 } from '@/lib/estimateTime'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useLanguage } from '@/components/LanguageProvider'
-import { extractVideoId, fetchYouTubeHeatmap, convertHeatmapForApi } from '@/lib/youtubeHeatmap'
+import { extractVideoId } from '@/lib/youtubeHeatmap'
 
 interface VideoData {
     videoPath: string
@@ -86,16 +86,26 @@ export default function ConfigPage() {
                 // Step 1: Analyze video (Only for AUTO mode)
                 toast.loading('Video analiz ediliyor...', { id: 'processing' })
 
-                // Try to fetch YouTube heatmap data client-side
+                // Try to fetch YouTube heatmap data via server-side API (bypasses CORS)
                 let heatmapData = null
                 if (videoData.url) {
                     const ytVideoId = extractVideoId(videoData.url)
                     if (ytVideoId) {
                         try {
                             toast.loading('YouTube heatmap verisi alınıyor...', { id: 'processing' })
-                            const heatmap = await fetchYouTubeHeatmap(ytVideoId)
-                            if (heatmap && heatmap.heatMarkers.length > 0) {
-                                heatmapData = convertHeatmapForApi(heatmap)
+                            const heatmapRes = await fetch('/api/heatmap', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ videoId: ytVideoId })
+                            })
+                            const { heatmap } = await heatmapRes.json()
+                            if (heatmap && heatmap.heatMarkers?.length > 0) {
+                                // Convert to the format expected by analyze API
+                                heatmapData = heatmap.heatMarkers.map((m: any) => ({
+                                    start_time: m.startMillis / 1000,
+                                    end_time: m.endMillis / 1000,
+                                    value: m.intensityScoreNormalized
+                                }))
                                 console.log('Heatmap fetched:', heatmapData.length, 'points')
                             }
                         } catch (err) {
