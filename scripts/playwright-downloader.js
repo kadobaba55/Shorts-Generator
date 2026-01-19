@@ -51,12 +51,8 @@ async function downloadVideo() {
         });
 
         const context = await browser.newContext({
-            // Emulate iPad - Often forces standard MP4/HLS streams
-            userAgent: 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1',
-            viewport: { width: 810, height: 1080 },
-            deviceScaleFactor: 2,
-            isMobile: true,
-            hasTouch: true,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
             locale: 'en-US',
             timezoneId: 'America/New_York'
         });
@@ -83,8 +79,9 @@ async function downloadVideo() {
                 // Ignore stats/logging calls
                 if (resUrl.includes('generate_204')) return;
 
-                // IGNORE UMP streams strictly
-                if (resUrl.includes('vnd.yt-ump')) return;
+                // We now ACCEPT valid video streams even if they are UMP,
+                // because we are forwarding headers which should fix the download.
+                // if (resUrl.includes('vnd.yt-ump')) return; (REMOVED FILTER)
 
                 const headers = response.headers();
                 const contentLength = headers['content-length'];
@@ -95,9 +92,9 @@ async function downloadVideo() {
 
                 if (streamUrl) return;
 
-                // Look for video/mp4
-                const isVideo = contentType.startsWith('video/') && !contentType.includes('application/vnd');
-                const isLarge = contentLength && parseInt(contentLength) > 1000000;
+                // Look for video/mp4, webm, or ump (now that we have headers)
+                const isVideo = contentType.startsWith('video/') || contentType.includes('application/vnd.yt-ump');
+                const isLarge = contentLength && parseInt(contentLength) > 100000; // >100KB (relaxed)
 
                 if (isVideo || isLarge) {
                     console.log('✅ Stream found:', resUrl);
