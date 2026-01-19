@@ -108,9 +108,19 @@ export async function POST(req: NextRequest) {
                 updateJob(job.id, { message: 'Video ve ses indiriliyor...', progress: 30 })
 
                 // Helper to download a stream to a file
-                const downloadStream = async (streamUrl: string, destPath: string) => {
-                    const res = await fetch(streamUrl)
-                    if (!res.ok) throw new Error(`Failed to fetch stream: ${res.statusText}`)
+                const downloadStream = async (streamUrl: string, destPath: string, headers: any) => {
+                    const res = await fetch(streamUrl, {
+                        headers: {
+                            'User-Agent': headers.userAgent,
+                            'Cookie': headers.cookie,
+                            'Referer': 'https://www.youtube.com/',
+                            'Origin': 'https://www.youtube.com'
+                        }
+                    })
+
+                    if (res.status === 403) throw new Error('403 Forbidden: Stream link expired or invalid cookies')
+                    if (!res.ok) throw new Error(`Failed to fetch stream: ${res.status} ${res.statusText}`)
+
                     const fileStream = fs.createWriteStream(destPath)
 
                     // @ts-ignore
@@ -122,16 +132,21 @@ export async function POST(req: NextRequest) {
                     await require('stream/promises').pipeline(Readable.fromWeb(body), fileStream)
                 }
 
+                const sessionHeaders = result.session || {
+                    cookie: '',
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+
                 // Download Video
                 const tempVideoPath = path.join(VIDEOS_DIR, `${videoId}_video.mp4`)
-                await downloadStream(result.videoUrl, tempVideoPath)
+                await downloadStream(result.videoUrl, tempVideoPath, sessionHeaders)
 
                 let finalFilePath = tempVideoPath
 
                 // Download Audio if present and different
                 if (result.audioUrl && result.audioUrl !== result.videoUrl) {
                     const tempAudioPath = path.join(VIDEOS_DIR, `${videoId}_audio.mp4`)
-                    await downloadStream(result.audioUrl, tempAudioPath)
+                    await downloadStream(result.audioUrl, tempAudioPath, sessionHeaders)
 
                     // Merge using FFmpeg
                     updateJob(job.id, { message: 'Video ve ses birleştiriliyor...', progress: 60 })

@@ -64,7 +64,6 @@ function parseCookieFile(cookieContent) {
                 const cookies = parseCookieFile(content);
                 if (cookies.length > 0) {
                     await context.addCookies(cookies);
-                    // console.error(`[Debug] Loaded ${cookies.length} cookies`);
                 }
             } catch (e) {
                 // console.error(`[Debug] Failed to load cookies: ${e.message}`);
@@ -87,7 +86,6 @@ function parseCookieFile(cookieContent) {
             // Filter for YouTube's video playback endpoints
             if (url.includes('videoplayback')) {
                 const resourceType = request.resourceType();
-                // We typically look for XHR/Fetch or Media types
                 if (resourceType === 'xhr' || resourceType === 'fetch' || resourceType === 'media') {
 
                     const decodedUrl = decodeURIComponent(url);
@@ -115,9 +113,7 @@ function parseCookieFile(cookieContent) {
         // 4. Navigate and Trigger Playback
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-        // Debug: Log Title
         const title = await page.title();
-        // console.error(`[Debug] Page Title: ${title}`);
 
         // Attempt to bypass consent modals efficiently
         const consentSelectors = [
@@ -140,9 +136,7 @@ function parseCookieFile(cookieContent) {
         // Wait for video element
         try {
             await page.waitForSelector('video', { timeout: 20000 });
-        } catch (e) {
-            // console.error('[Debug] Video element not found');
-        }
+        } catch (e) { }
 
         // Programmatic play trigger (ensure SABR starts)
         await page.evaluate(async () => {
@@ -173,21 +167,28 @@ function parseCookieFile(cookieContent) {
             }
         }
 
-        // 6. Return Result
+        // 6. Capture Session Info for Headers
+        const cookies = await context.cookies();
+        const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+        const userAgent = await page.evaluate(() => navigator.userAgent);
+
+        // 7. Return Result
         if (capturedStreams.video) {
             // Success
             console.log(JSON.stringify({
                 success: true,
                 videoUrl: capturedStreams.video,
                 audioUrl: capturedStreams.audio,
-                expiresAt: capturedStreams.expiresAt
+                expiresAt: capturedStreams.expiresAt,
+                session: {
+                    cookie: cookieString,
+                    userAgent: userAgent
+                }
             }));
         } else {
             // Failure - Take Screenshot for debugging
             const debugPath = path.join(process.cwd(), 'public', 'error_screenshot.png');
             await page.screenshot({ path: debugPath, fullPage: true });
-
-            // console.error(`[Debug] Screenshot saved to ${debugPath}`);
 
             console.log(JSON.stringify({
                 success: false,
