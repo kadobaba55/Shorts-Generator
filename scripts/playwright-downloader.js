@@ -123,7 +123,8 @@ async function runHybridDownload() {
         // -N 4: split into 4 threads (faster)
         // --cookies: use our fresh cookies
 
-        let ytDlpExecutable = 'yt-dlp'; // Default to global command
+        // Check/Download local yt-dlp binary
+        let ytDlpExecutable = 'yt-dlp'; // Default to global
         const isWin = process.platform === 'win32';
         const localBinName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
         const localPath = path.join(__dirname, localBinName);
@@ -132,7 +133,30 @@ async function runHybridDownload() {
             ytDlpExecutable = localPath;
             console.log(`Using local yt-dlp at: ${ytDlpExecutable}`);
         } else {
-            console.log('Using global system yt-dlp');
+            console.log('Local yt-dlp not found. Attempting to download latest version...');
+            try {
+                const downloadUrl = isWin
+                    ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
+                    : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+
+                // Simple download using fetch (Node 18+)
+                const res = await fetch(downloadUrl);
+                if (!res.ok) throw new Error(`Failed to download yt-dlp: ${res.statusText}`);
+
+                const arrayBuffer = await res.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                fs.writeFileSync(localPath, buffer);
+
+                if (!isWin) {
+                    fs.chmodSync(localPath, '755'); // Make executable on Linux
+                }
+
+                console.log(`✅ Downloaded yt-dlp to ${localPath}`);
+                ytDlpExecutable = localPath;
+            } catch (e) {
+                console.error('⚠️ Failed to download local yt-dlp:', e.message);
+                console.log('Falling back to global system yt-dlp');
+            }
         }
 
         const ytDlp = spawn(ytDlpExecutable, [
