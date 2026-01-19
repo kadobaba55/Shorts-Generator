@@ -73,156 +73,48 @@ export async function POST(req: NextRequest) {
                 })
             }
 
-            updateJob(job.id, { status: 'processing', message: 'Cobalt API ile video alınıyor...', queuePosition: undefined })
+            updateJob(job.id, { status: 'processing', message: 'yt-dlp ile video indiriliyor...', queuePosition: undefined })
 
             try {
-                // Step 1: Call Cobalt API to get download URL (self-hosted)
-                const COBALT_API = process.env.COBALT_API_URL || 'http://localhost:9000'
+                // Import the cookie-based downloader
+                const { downloadWithCookies, hasCookies, getCookieAge } = require('@/lib/ytdlpCookies')
 
-                const cobaltResponse = await fetch(COBALT_API, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        url: url,
-                        videoQuality: '1080',
-                        filenameStyle: 'basic',
-                        downloadMode: 'auto'
-                    })
-                })
-
-                if (!cobaltResponse.ok) {
-                    const errorText = await cobaltResponse.text()
-                    throw new Error(`Cobalt API hatası: ${cobaltResponse.status} - ${errorText}`)
+                // Check if cookies are available
+                if (!hasCookies()) {
+                    throw new Error('Cookie dosyası bulunamadı. Admin panelinden YouTube cookie yükleyin.')
                 }
 
-                const cobaltData = await cobaltResponse.json()
-                console.log('Cobalt response:', cobaltData)
-
-                if (cobaltData.status === 'error') {
-                    throw new Error(cobaltData.error?.code || 'Cobalt API bilinmeyen hata')
+                const cookieAge = getCookieAge()
+                if (cookieAge > 14) {
+                    console.warn(`⚠️ Cookies are ${cookieAge} days old, may need renewal`)
                 }
 
-                // Get the download URL from Cobalt response
-                let downloadUrl = ''
-                let videoTitle = 'video'
-
-                if (cobaltData.status === 'tunnel' || cobaltData.status === 'redirect') {
-                    downloadUrl = cobaltData.url
-                    videoTitle = cobaltData.filename || 'video'
-                } else if (cobaltData.status === 'picker' && cobaltData.picker?.length > 0) {
-                    // For videos with multiple options, pick the first video
-                    const videoOption = cobaltData.picker.find((p: any) => p.type === 'video') || cobaltData.picker[0]
-                    downloadUrl = videoOption.url
-                    videoTitle = videoOption.filename || 'video'
-                } else {
-                    throw new Error('Cobalt API geçersiz yanıt döndürdü')
-                }
-
-                updateJob(job.id, { message: `İndiriliyor: ${videoTitle.substring(0, 30)}...`, progress: 10 })
-
-                // Step 2: Download video from Cobalt's tunnel URL using Node.js streams
-                // Cobalt tunnel URLs require proper streaming - fetch doesn't work well in Next.js server
-                console.log(`📥 Starting download from: ${downloadUrl.substring(0, 80)}...`)
-
-                await new Promise<void>((resolve, reject) => {
-                    const urlObj = new URL(downloadUrl)
-                    const httpModule = urlObj.protocol === 'https:' ? require('https') : require('http')
-
-                    console.log(`🔗 Using ${urlObj.protocol} module for download`)
-
-                    const request = httpModule.get(downloadUrl, (response: any) => {
-                        console.log(`📡 Response status: ${response.statusCode}`)
-                        console.log(`📡 Response headers:`, JSON.stringify(response.headers).substring(0, 200))
-
-                        // Handle redirects
-                        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                            console.log(`🔄 Following redirect to: ${response.headers.location}`)
-                            const redirectModule = response.headers.location.startsWith('https') ? require('https') : require('http')
-                            redirectModule.get(response.headers.location, (redirectRes: any) => {
-                                console.log(`📡 Redirect response status: ${redirectRes.statusCode}`)
-                                handleResponse(redirectRes)
-                            }).on('error', reject)
-                            return
-                        }
-
-                        handleResponse(response)
-                    })
-
-                    const handleResponse = (response: any) => {
-                        if (response.statusCode !== 200) {
-                            console.error(`❌ Non-200 status: ${response.statusCode}`)
-                            reject(new Error(`Video indirme hatası: ${response.statusCode}`))
-                            return
-                        }
-
-                        const contentLength = response.headers['content-length']
-                        const totalSize = contentLength ? parseInt(contentLength, 10) : 0
-                        console.log(`📊 Content-Length: ${totalSize} bytes (${(totalSize / 1024 / 1024).toFixed(2)} MB)`)
-
-                        const fileStream = fs.createWriteStream(outputPath)
-                        let downloadedSize = 0
-                        let lastLogTime = Date.now()
-
-                        response.on('data', (chunk: Buffer) => {
-                            downloadedSize += chunk.length
-                            const now = Date.now()
-                            // Log progress every 2 seconds
-                            if (now - lastLogTime > 2000) {
-                                console.log(`📥 Downloaded: ${(downloadedSize / 1024 / 1024).toFixed(2)} MB`)
-                                lastLogTime = now
-                            }
-                            if (totalSize > 0) {
-                                const progress = Math.round((downloadedSize / totalSize) * 80) + 10
-                                updateJob(job.id, { progress })
-                            }
-                        })
-
-                        response.on('end', () => {
-                            console.log(`✅ Stream ended. Total downloaded: ${(downloadedSize / 1024 / 1024).toFixed(2)} MB`)
-                        })
-
-                        response.on('error', (err: any) => {
-                            console.error(`❌ Response error:`, err)
-                            reject(err)
-                        })
-
-                        response.pipe(fileStream)
-
-                        fileStream.on('finish', () => {
-                            console.log(`💾 File stream finished. Closing...`)
-                            fileStream.close()
-                            resolve()
-                        })
-
-                        fileStream.on('error', (err: any) => {
-                            console.error(`❌ File write error:`, err)
-                            reject(err)
-                        })
+                // Download using yt-dlp with cookies
+                const downloadResult = await downloadWithCookies(
+                    url,
+                    outputPath,
+                    (progress: number, message: string) => {
+                        updateJob(job.id, { progress, message })
                     }
+                )
 
-                    request.on('error', (err: any) => {
-                        console.error(`❌ Request error:`, err)
-                        reject(err)
-                    })
+                if (!downloadResult.success) {
+                    throw new Error(downloadResult.error || 'İndirme başarısız')
+                }
 
-                    request.setTimeout(300000, () => { // 5 min timeout
-                        console.error(`❌ Request timeout after 5 minutes`)
-                        request.destroy()
-                        reject(new Error('Download timeout'))
-                    })
-                })
+                const videoTitle = downloadResult.title || 'video'
+                const duration = downloadResult.duration || 0
+
+                console.log(`✅ Download complete via yt-dlp with cookies`)
 
                 // Verify downloaded file
                 if (!fs.existsSync(outputPath)) {
                     throw new Error('İndirilen dosya bulunamadı')
                 }
                 const fileSize = fs.statSync(outputPath).size
-                console.log(`✅ Download complete. File: ${outputPath}, Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
+                console.log(`✅ File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
 
-                // Step 3: Upload to R2
+                // Step 2: Upload to R2
                 const { uploadFileToR2 } = require('@/lib/storage')
                 updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️', progress: 95 })
 
@@ -236,15 +128,6 @@ export async function POST(req: NextRequest) {
                     console.log('Local file deleted')
                 } catch (delErr) {
                     console.warn('Could not delete local file:', delErr)
-                }
-
-                // Get video duration using ffprobe
-                let duration = 0
-                try {
-                    const { stdout: durationStr } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`)
-                    duration = parseFloat(durationStr.trim()) || 0
-                } catch (e) {
-                    console.warn('Could not get duration:', e)
                 }
 
                 // Complete Job
