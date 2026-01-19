@@ -125,42 +125,91 @@ export async function POST(req: NextRequest) {
 
                 // Step 2: Download video from Cobalt's tunnel URL using Node.js streams
                 // Cobalt tunnel URLs require proper streaming - fetch doesn't work well in Next.js server
+                console.log(`📥 Starting download from: ${downloadUrl.substring(0, 80)}...`)
+
                 await new Promise<void>((resolve, reject) => {
                     const urlObj = new URL(downloadUrl)
                     const httpModule = urlObj.protocol === 'https:' ? require('https') : require('http')
 
+                    console.log(`🔗 Using ${urlObj.protocol} module for download`)
+
                     const request = httpModule.get(downloadUrl, (response: any) => {
+                        console.log(`📡 Response status: ${response.statusCode}`)
+                        console.log(`📡 Response headers:`, JSON.stringify(response.headers).substring(0, 200))
+
+                        // Handle redirects
+                        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                            console.log(`🔄 Following redirect to: ${response.headers.location}`)
+                            const redirectModule = response.headers.location.startsWith('https') ? require('https') : require('http')
+                            redirectModule.get(response.headers.location, (redirectRes: any) => {
+                                console.log(`📡 Redirect response status: ${redirectRes.statusCode}`)
+                                handleResponse(redirectRes)
+                            }).on('error', reject)
+                            return
+                        }
+
+                        handleResponse(response)
+                    })
+
+                    const handleResponse = (response: any) => {
                         if (response.statusCode !== 200) {
+                            console.error(`❌ Non-200 status: ${response.statusCode}`)
                             reject(new Error(`Video indirme hatası: ${response.statusCode}`))
                             return
                         }
 
                         const contentLength = response.headers['content-length']
                         const totalSize = contentLength ? parseInt(contentLength, 10) : 0
+                        console.log(`📊 Content-Length: ${totalSize} bytes (${(totalSize / 1024 / 1024).toFixed(2)} MB)`)
 
                         const fileStream = fs.createWriteStream(outputPath)
                         let downloadedSize = 0
+                        let lastLogTime = Date.now()
 
                         response.on('data', (chunk: Buffer) => {
                             downloadedSize += chunk.length
+                            const now = Date.now()
+                            // Log progress every 2 seconds
+                            if (now - lastLogTime > 2000) {
+                                console.log(`📥 Downloaded: ${(downloadedSize / 1024 / 1024).toFixed(2)} MB`)
+                                lastLogTime = now
+                            }
                             if (totalSize > 0) {
                                 const progress = Math.round((downloadedSize / totalSize) * 80) + 10
                                 updateJob(job.id, { progress })
                             }
                         })
 
+                        response.on('end', () => {
+                            console.log(`✅ Stream ended. Total downloaded: ${(downloadedSize / 1024 / 1024).toFixed(2)} MB`)
+                        })
+
+                        response.on('error', (err: any) => {
+                            console.error(`❌ Response error:`, err)
+                            reject(err)
+                        })
+
                         response.pipe(fileStream)
 
                         fileStream.on('finish', () => {
+                            console.log(`💾 File stream finished. Closing...`)
                             fileStream.close()
                             resolve()
                         })
 
-                        fileStream.on('error', reject)
+                        fileStream.on('error', (err: any) => {
+                            console.error(`❌ File write error:`, err)
+                            reject(err)
+                        })
+                    }
+
+                    request.on('error', (err: any) => {
+                        console.error(`❌ Request error:`, err)
+                        reject(err)
                     })
 
-                    request.on('error', reject)
                     request.setTimeout(300000, () => { // 5 min timeout
+                        console.error(`❌ Request timeout after 5 minutes`)
                         request.destroy()
                         reject(new Error('Download timeout'))
                     })
