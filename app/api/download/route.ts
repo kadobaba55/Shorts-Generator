@@ -76,55 +76,98 @@ export async function POST(req: NextRequest) {
             updateJob(job.id, { status: 'processing', message: 'yt-dlp ile video indiriliyor...', queuePosition: undefined })
 
             try {
-                // Import the cookie-based downloader
-                const { downloadWithCookies, hasCookies, getCookieAge } = require('@/lib/ytdlpCookies')
+                // NEW: Use Pure Playwright Downloader
+                console.log(`🚀 Starting Playwright-only download for: ${url}`)
 
-                // Check if cookies are available
-                if (!hasCookies()) {
-                    throw new Error('Cookie dosyası bulunamadı. Admin panelinden YouTube cookie yükleyin.')
+                const scriptPath = path.join(process.cwd(), 'scripts', 'playwright-downloader.js')
+                const { stdout, stderr } = await execAsync(`node "${scriptPath}" "${url}"`, {
+                    maxBuffer: 10 * 1024 * 1024, // 10MB buffer for logs
+                    timeout: 120000 // 2 minutes timeout for extraction
+                })
+
+                // Parse the JSON output from the script
+                // The script might output logs before the JSON, so we find the last JSON object
+                const jsonMatch = stdout.trim().split('\n').pop()
+                let result
+                try {
+                    result = JSON.parse(jsonMatch || '{}')
+                } catch (e) {
+                    console.error('Failed to parse downloader output:', stdout)
+                    throw new Error('Downloader script returned invalid data')
                 }
 
-                const cookieAge = getCookieAge()
-                if (cookieAge > 14) {
-                    console.warn(`⚠️ Cookies are ${cookieAge} days old, may need renewal`)
+                if (!result.success || !result.videoUrl) {
+                    throw new Error(result.error || 'Video URL extraction failed')
                 }
 
-                // Download using yt-dlp with cookies
-                const downloadResult = await downloadWithCookies(
-                    url,
-                    outputPath,
-                    (progress: number, message: string) => {
-                        updateJob(job.id, { progress, message })
-                    }
-                )
+                console.log('✅ Streams extracted successfully')
+                updateJob(job.id, { message: 'Video ve ses indiriliyor...', progress: 30 })
 
-                if (!downloadResult.success) {
-                    throw new Error(downloadResult.error || 'İndirme başarısız')
+                // Helper to download a stream to a file
+                const downloadStream = async (streamUrl: string, destPath: string) => {
+                    const res = await fetch(streamUrl)
+                    if (!res.ok) throw new Error(`Failed to fetch stream: ${res.statusText}`)
+                    const fileStream = fs.createWriteStream(destPath)
+
+                    // @ts-ignore
+                    const { body } = res
+                    if (!body) throw new Error('No body in response')
+
+                    // Node 18 native fetch readable stream to fs write stream
+                    const { Readable } = require('stream')
+                    await require('stream/promises').pipeline(Readable.fromWeb(body), fileStream)
                 }
 
-                const videoTitle = downloadResult.title || 'video'
-                const duration = downloadResult.duration || 0
+                // Download Video
+                const tempVideoPath = path.join(VIDEOS_DIR, `${videoId}_video.mp4`)
+                await downloadStream(result.videoUrl, tempVideoPath)
 
-                console.log(`✅ Download complete via yt-dlp with cookies`)
+                let finalFilePath = tempVideoPath
 
-                // Verify downloaded file
-                if (!fs.existsSync(outputPath)) {
-                    throw new Error('İndirilen dosya bulunamadı')
+                // Download Audio if present and different
+                if (result.audioUrl && result.audioUrl !== result.videoUrl) {
+                    const tempAudioPath = path.join(VIDEOS_DIR, `${videoId}_audio.mp4`)
+                    await downloadStream(result.audioUrl, tempAudioPath)
+
+                    // Merge using FFmpeg
+                    updateJob(job.id, { message: 'Video ve ses birleştiriliyor...', progress: 60 })
+                    const mergedPath = path.join(VIDEOS_DIR, `${videoId}.mp4`)
+
+                    await execAsync(`ffmpeg -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a aac "${mergedPath}" -y`)
+
+                    // Cleanup temps
+                    fs.unlinkSync(tempVideoPath)
+                    fs.unlinkSync(tempAudioPath)
+                    finalFilePath = mergedPath
+                } else {
+                    // Rename video only to final path
+                    const mergedPath = path.join(VIDEOS_DIR, `${videoId}.mp4`)
+                    fs.renameSync(tempVideoPath, mergedPath)
+                    finalFilePath = mergedPath
                 }
-                const fileSize = fs.statSync(outputPath).size
-                console.log(`✅ File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
+
+                // Verify file
+                if (!fs.existsSync(finalFilePath)) {
+                    throw new Error('Final file creation failed')
+                }
+
+                const stats = fs.statSync(finalFilePath)
+                console.log(`✅ File ready: ${(stats.size / 1024 / 1024).toFixed(2)} MB`)
+
+                const videoTitle = 'Video ' + videoId
+                const duration = 0 // Duration extraction would require ffprobe, skipping for speed
 
                 // Step 2: Upload to R2
                 const { uploadFileToR2 } = require('@/lib/storage')
                 updateJob(job.id, { message: 'Cloudflare R2\'ye yükleniyor... ☁️', progress: 95 })
 
                 const r2Key = `uploads/${videoId}.mp4`
-                const publicUrl = await uploadFileToR2(outputPath, r2Key, 'video/mp4')
+                const publicUrl = await uploadFileToR2(finalFilePath, r2Key, 'video/mp4')
                 console.log('✅ R2 upload complete:', publicUrl)
 
                 // Delete local file
                 try {
-                    fs.unlinkSync(outputPath)
+                    fs.unlinkSync(finalFilePath)
                     console.log('Local file deleted')
                 } catch (delErr) {
                     console.warn('Could not delete local file:', delErr)
@@ -138,7 +181,7 @@ export async function POST(req: NextRequest) {
                     result: {
                         videoId,
                         videoPath: publicUrl,
-                        title: videoTitle.replace(/\.[^/.]+$/, ''), // Remove extension
+                        title: videoTitle,
                         duration: duration,
                         thumbnail: `https://img.youtube.com/vi/${extractYouTubeId(url)}/maxresdefault.jpg`
                     }
@@ -149,6 +192,9 @@ export async function POST(req: NextRequest) {
                 console.error('Download error:', error)
                 completeJob(job.id, 'download')
                 updateJob(job.id, { status: 'error', error: error.message || 'İndirme hatası' })
+
+                // Detailed stderr logging if available from child process error
+                if (error.stderr) console.error('STDERR:', error.stderr)
             }
         }
 
