@@ -159,21 +159,31 @@ async function runHybridDownload() {
             }
         }
 
-        const ytDlp = spawn(ytDlpExecutable, [
+        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+
+        const ytDlpArgs = [
             '--cookies', tempCookiePath,
+            '--user-agent', userAgent,
+            '--extractor-args', 'youtube:player_client=android',
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', outputPath,
             '--no-playlist',
-            '--force-overwrites', // Overwrite 0KB files if any
+            '--force-overwrites',
             url
-        ]);
+        ];
+
+        const ytDlp = spawn(ytDlpExecutable, ytDlpArgs);
+
+        let stderrOutput = '';
 
         ytDlp.stdout.on('data', (data) => {
             console.log(`[yt-dlp]: ${data.toString().trim()}`);
         });
 
         ytDlp.stderr.on('data', (data) => {
-            console.error(`[yt-dlp err]: ${data.toString().trim()}`);
+            const msg = data.toString().trim();
+            stderrOutput += msg + '\n';
+            console.error(`[yt-dlp err]: ${msg}`);
         });
 
         ytDlp.on('close', (code) => {
@@ -207,7 +217,7 @@ async function runHybridDownload() {
                     process.exit(1);
                 }
             } else {
-                console.log(JSON.stringify({ success: false, error: `yt-dlp exited with code ${code}` }));
+                console.log(JSON.stringify({ success: false, error: `yt-dlp exited with code ${code}`, details: stderrOutput }));
                 process.exit(1);
             }
         });
