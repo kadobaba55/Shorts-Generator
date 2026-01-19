@@ -112,7 +112,46 @@ async function runHybridDownload() {
         const freshCookies = await context.cookies();
         const netscapeCookies = jsonToNetscape(freshCookies);
         fs.writeFileSync(tempCookiePath, netscapeCookies);
-        console.log(`✅ Harvested ${freshCookies.length} fresh cookies. Saved to ${tempCookiePath}`);
+        console.log(`✅ Harvested ${freshCookies.length} fresh cookies.`);
+
+        // 3. Extract PO Token (Proof of Origin)
+        // This is critical for the "web" client to work without being blocked.
+        // We try to find it in the ytcfg global object or intercept it.
+        let poToken = null;
+        let visitorData = null;
+
+        try {
+            const result = await page.evaluate(() => {
+                let token = null;
+                let visitor = null;
+
+                // Method 1: Check ytcfg
+                if (window.ytcfg && window.ytcfg.data_) {
+                    visitor = window.ytcfg.data_.VISITOR_DATA;
+                    // PO Token is often buried or generated via potential BotGuard.
+                    // Ideally we look for 'botguardResponse' or similar if exposed.
+                }
+
+                // Method 2: Check for known PO Token location in global scope (experimental)
+                // Often standard web client doesn't expose it easily.
+                // However, we can use the "visitorData" which is often enough with cookies.
+
+                return { visitor };
+            });
+
+            if (result.visitor) {
+                visitorData = result.visitor;
+                console.log(`✅ Extracted Visitor Data: ${visitorData.substring(0, 10)}...`);
+            }
+
+            // NOTE: Full PO Token extraction requires deep hooking into the "botguard" script execution.
+            // For now, we will try to rely on Cookies + UserAgent + Visitor Data.
+            // If we really need PO Token, we might need to intercept the '/youtubei/v1/player' request 
+            // and look at the 'serviceIntegrityDimensions' in the payload.
+
+        } catch (e) {
+            console.warn('⚠️ Failed to extract tokens:', e.message);
+        }
 
         await browser.close();
         browser = null;
@@ -164,20 +203,28 @@ async function runHybridDownload() {
             }
         }
 
-        // Use Mobile User-Agent for mweb client
-        const userAgent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36';
+        // Use Desktop User-Agent for standard web client
+        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
 
-        // Re-launch browser with Mobile UA if it was different? 
-        // Actually, we should set this at the start. 
-        // For now, let's keep the browser creation logic at the top, but we need to ensure they match.
-        // We will update the browser context creation above in the next edit. 
-        // HERE we just define the args matching the UA we WILL use.
+        // Construct Extractor Args
+        let extractorArgs = 'youtube:player_client=web';
+
+        if (visitorData) {
+            extractorArgs += `;youtube:visitor_data=${visitorData}`;
+        }
+
+        if (poToken) {
+            // Pass the extracted PO Token for the 'web' client
+            extractorArgs += `;youtube:po_token=web+${poToken}`;
+            console.log('✅ Applying PO Token to yt-dlp args');
+        } else {
+            console.log('⚠️ No PO Token found, proceeding with Cookies + Visitor Data only...');
+        }
 
         const ytDlpArgs = [
             '--cookies', tempCookiePath,
             '--user-agent', userAgent,
-            // Use Mobile Web client - supports cookies AND often bypasses desktop throttling
-            '--extractor-args', 'youtube:player_client=mweb',
+            '--extractor-args', extractorArgs,
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', outputPath,
             '--no-playlist',
