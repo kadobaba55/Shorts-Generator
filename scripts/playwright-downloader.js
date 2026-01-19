@@ -72,9 +72,10 @@ async function downloadVideo() {
 
         const page = await context.newPage();
         let streamUrl = null;
+        let streamHeaders = {};
 
         // Network Interception
-        page.on('response', (response) => {
+        page.on('response', async (response) => {
             const resUrl = response.url();
 
             // Check for potential video streams
@@ -101,6 +102,7 @@ async function downloadVideo() {
                 if (isVideo || isLarge) {
                     console.log('✅ Stream found:', resUrl);
                     streamUrl = resUrl;
+                    try { streamHeaders = await response.request().allHeaders(); } catch (e) { }
                 }
             }
         });
@@ -170,8 +172,19 @@ async function downloadVideo() {
         });
 
         // Download in browser context (chunked using Fetch API + Streams)
-        await page.evaluate(async (src) => {
-            const res = await fetch(src);
+        await page.evaluate(async ({ src, headers }) => {
+
+            // Filter headers to be safe
+            const safeHeaders = {};
+            const forbidden = ['host', 'connection', 'content-length', 'pragma', 'expect', 'user-agent', 'cookie', 'accept-encoding'];
+
+            for (const [key, value] of Object.entries(headers)) {
+                if (!forbidden.includes(key.toLowerCase())) {
+                    safeHeaders[key] = value;
+                }
+            }
+
+            const res = await fetch(src, { headers: safeHeaders });
             if (!res.ok) throw new Error('Fetch failed: ' + res.status);
 
             if (!res.body) throw new Error('No body in response');
@@ -197,7 +210,7 @@ async function downloadVideo() {
                 const base64 = chunkToBase64(value);
                 await window.saveChunk(base64);
             }
-        }, streamUrl);
+        }, { src: streamUrl, headers: streamHeaders });
 
         await browser.close();
         browser = null;
