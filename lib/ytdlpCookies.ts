@@ -58,6 +58,12 @@ export async function downloadWithCookies(
     try {
         onProgress?.(5, 'Playwright ile indiriliyor...')
 
+        console.log('🔍 Checking downloadWithPlaywright import type:', typeof downloadWithPlaywright)
+
+        if (typeof downloadWithPlaywright !== 'function') {
+            throw new Error(`Import error: downloadWithPlaywright is ${typeof downloadWithPlaywright}`)
+        }
+
         const result = await downloadWithPlaywright(url, outputPath, onProgress)
 
         if (result.success) {

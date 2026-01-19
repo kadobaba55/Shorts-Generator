@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     experimental: {
+        serverComponentsExternalPackages: ['playwright'],
         serverActions: {
             // Production domain'i için NEXT_PUBLIC_DOMAIN env variable kullanılacak
             allowedOrigins: [
