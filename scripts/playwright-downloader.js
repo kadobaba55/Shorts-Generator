@@ -72,13 +72,29 @@ async function downloadVideo() {
         // Network Interception
         page.on('response', (response) => {
             const resUrl = response.url();
-            if ((resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) && !streamUrl) {
+
+            // Check for potential video streams
+            if (resUrl.includes('videoplayback') || resUrl.includes('.googlevideo.com/')) {
                 const headers = response.headers();
                 const contentLength = headers['content-length'];
                 const contentType = headers['content-type'];
 
-                if ((contentLength && parseInt(contentLength) > 1000000) || (contentType && contentType.includes('video'))) {
-                    console.log('🎬 Found video stream:', resUrl);
+                // Log all candidates for debugging
+                console.log(`📡 Network candidate: ${resUrl.substring(0, 100)}... [Type: ${contentType}, Size: ${contentLength}]`);
+
+                if (streamUrl) return; // Already found one
+
+                // Heuristic:
+                // 1. Content-type starts with video/
+                // 2. OR Content-length > 500KB (relaxed from 1MB)
+                // 3. OR Transfer-encoding is chunked (no content-length)
+
+                const isVideoType = contentType && contentType.startsWith('video/');
+                const isLargeEnough = contentLength && parseInt(contentLength) > 500000;
+                const isChunked = headers['transfer-encoding'] === 'chunked';
+
+                if (isVideoType || isLargeEnough || isChunked) {
+                    console.log('✅ Stream found:', resUrl);
                     streamUrl = resUrl;
                 }
             }
@@ -93,7 +109,8 @@ async function downloadVideo() {
                 'button[aria-label="Accept all"]',
                 'button[aria-label="Reject all"]',
                 '.eom-button-row button',
-                '#content .ytd-consent-bump-v2-lightbox button'
+                '#content .ytd-consent-bump-v2-lightbox button',
+                'yt-button-renderer#button' // Generic button often used in popups
             ];
             for (const selector of consentSelectors) {
                 if (await page.$(selector)) {
@@ -105,9 +122,12 @@ async function downloadVideo() {
             }
         } catch (e) { /* ignore */ }
 
-        // Start Playback
+        // Start Playback - More Aggressive
         try {
-            const playButtonSelectors = ['.ytp-large-play-button', 'button[aria-label="Play"]'];
+            console.log('Attempting to force playback...');
+
+            // 1. Click overlay buttons
+            const playButtonSelectors = ['.ytp-large-play-button', 'button[aria-label="Play"]', '.ytp-play-button'];
             for (const selector of playButtonSelectors) {
                 if (await page.isVisible(selector)) {
                     await page.click(selector);
@@ -115,7 +135,11 @@ async function downloadVideo() {
                 }
             }
 
+            // 2. Click video element
             await page.waitForSelector('video', { timeout: 10000 });
+            await page.click('video');
+
+            // 3. Programmatic play
             await page.evaluate(() => {
                 const video = document.querySelector('video');
                 if (video) {
@@ -130,9 +154,11 @@ async function downloadVideo() {
 
         // Wait for Stream
         let attempts = 0;
-        while (!streamUrl && attempts < 30) {
+        // Wait up to 20 seconds, checking every 500ms
+        while (!streamUrl && attempts < 40) {
             await new Promise(r => setTimeout(r, 500));
             attempts++;
+            if (attempts % 10 === 0) console.log('Waiting for stream...');
         }
 
         if (!streamUrl) {
