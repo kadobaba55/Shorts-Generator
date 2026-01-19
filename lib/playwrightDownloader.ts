@@ -56,7 +56,6 @@ export async function downloadWithPlaywright(
     try {
         onProgress?.(5, 'Tarayıcı başlatılıyor...')
 
-        // Launch headless browser
         browser = await chromium.launch({
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -66,7 +65,6 @@ export async function downloadWithPlaywright(
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
 
-        // Load cookies if available
         if (fs.existsSync(COOKIES_PATH)) {
             const cookieContent = fs.readFileSync(COOKIES_PATH, 'utf-8')
             const cookies = parseCookieFile(cookieContent)
@@ -78,108 +76,88 @@ export async function downloadWithPlaywright(
 
         const page = await context.newPage()
 
-        onProgress?.(10, 'YouTube sayfası açılıyor...')
-
-        // Navigate to the video page
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 })
-
-        // Wait for video player to load
-        await page.waitForSelector('video', { timeout: 30000 })
-
-        onProgress?.(20, 'Video bilgisi alınıyor...')
-
-        // Get video title
-        const title = await page.evaluate(() => {
-            const titleEl = document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata')
-            return titleEl?.textContent?.trim() || 'video'
+        // Capture video streams from network
+        let streamUrl: string | null = null
+        page.on('response', (response) => {
+            const url = response.url()
+            if (url.includes('videoplayback') && !streamUrl) {
+                const contentLength = response.headers()['content-length']
+                if (contentLength && parseInt(contentLength) > 1000000) { // > 1MB
+                    console.log('🎬 Found video stream:', url)
+                    streamUrl = url
+                }
+            }
         })
 
-        console.log(`📹 Video title: ${title}`)
+        onProgress?.(10, 'YouTube sayfası açılıyor...')
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
-        // Get video duration
+        // Handle consent popup
+        try {
+            const consentSelectors = [
+                'button[aria-label="Accept all"]',
+                'button[aria-label="Reject all"]',
+                '.eom-button-row button'
+            ]
+            for (const selector of consentSelectors) {
+                if (await page.$(selector)) {
+                    await page.click(selector)
+                    console.log('🍪 Consent popup handled')
+                    break
+                }
+            }
+        } catch (e) {
+            console.log('No consent popup found')
+        }
+
+        onProgress?.(20, 'Video oynatılıyor...')
+
+        // Wait for video element and force play to trigger network request
+        await page.waitForSelector('video', { timeout: 30000 })
+        await page.evaluate(() => {
+            const video = document.querySelector('video')
+            if (video) {
+                video.muted = true
+                video.play()
+                video.currentTime = 5 // skip beginning
+            }
+        })
+
+        // Wait for network capture
+        let attempts = 0
+        while (!streamUrl && attempts < 20) {
+            await new Promise(r => setTimeout(r, 500))
+            attempts++
+        }
+
+        // Get updated title
+        const title = await page.evaluate(() => {
+            return document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata')?.textContent?.trim() || 'video'
+        })
+
         const duration = await page.evaluate(() => {
-            const video = document.querySelector('video') as HTMLVideoElement
+            const video = document.querySelector('video')
             return video?.duration || 0
         })
 
-        onProgress?.(30, 'Video stream URL çıkarılıyor...')
-
-        // Extract video source URL from the page
-        const videoUrl = await page.evaluate(() => {
-            const video = document.querySelector('video') as HTMLVideoElement
-            if (video?.src) return video.src
-
-            // Try to find in network requests or ytInitialPlayerResponse
-            const scripts = Array.from(document.querySelectorAll('script'))
-            for (const script of scripts) {
-                const content = script.textContent || ''
-                if (content.includes('ytInitialPlayerResponse')) {
-                    const match = content.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/)
-                    if (match) {
-                        try {
-                            const data = JSON.parse(match[1])
-                            const formats = data.streamingData?.formats || []
-                            const adaptiveFormats = data.streamingData?.adaptiveFormats || []
-                            const allFormats = [...formats, ...adaptiveFormats]
-
-                            // Find best mp4 format with both video and audio
-                            const mp4Format = allFormats.find((f: any) =>
-                                f.mimeType?.includes('video/mp4') &&
-                                f.audioChannels &&
-                                f.url
-                            )
-
-                            if (mp4Format?.url) return mp4Format.url
-
-                            // Fallback: any format with URL
-                            const anyFormat = allFormats.find((f: any) => f.url)
-                            if (anyFormat?.url) return anyFormat.url
-                        } catch (e) {
-                            console.error('Parse error:', e)
-                        }
-                    }
-                }
-            }
-
-            return null
-        })
-
-        if (!videoUrl) {
-            // Try using yt-dlp with the browser's cookies
-            await browser.close()
-            browser = null
-
-            onProgress?.(40, 'yt-dlp ile indiriliyor...')
-
-            // Export cookies from context and use yt-dlp
-            const cmd = `yt-dlp --cookies "${COOKIES_PATH}" -f "best[height<=1080]" -o "${outputPath}" "${url}"`
-            await execAsync(cmd, { timeout: 600000 })
-
-            if (fs.existsSync(outputPath)) {
-                const fileSize = fs.statSync(outputPath).size
-                if (fileSize > 1000) {
-                    return { success: true, title, duration, filePath: outputPath }
-                }
-            }
-
-            return { success: false, error: 'Video URL bulunamadı' }
+        if (!streamUrl) {
+            throw new Error('Video akışı yakalanamadı. Bot koruması veya ağ hatası.')
         }
 
         onProgress?.(50, 'Video indiriliyor...')
+        console.log(`Downloading from stream: ${streamUrl}`)
 
-        // Download video using fetch in browser context
+        // Download using the captured stream URL
         const videoBuffer = await page.evaluate(async (videoSrc) => {
             const response = await fetch(videoSrc)
             const buffer = await response.arrayBuffer()
             return Array.from(new Uint8Array(buffer))
-        }, videoUrl)
+        }, streamUrl)
 
         await browser.close()
         browser = null
 
-        // Write to file
-        fs.writeFileSync(outputPath, Buffer.from(videoBuffer))
-
+        fs.writeFileSync(outputPath, Buffer.from(videoBuffer as any))
         const fileSize = fs.statSync(outputPath).size
         console.log(`✅ Downloaded: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
 
@@ -191,6 +169,14 @@ export async function downloadWithPlaywright(
 
     } catch (error: any) {
         console.error('Playwright download error:', error)
+        // Screenshot for debug (saving to public to view if needed)
+        if (browser) {
+            try {
+                // const pages = await browser.pages() // pages() is not on browser, but on contexts.
+                // We don't have easy access to page object here in catch block if we lost reference.
+                // Resetting logic is complex here.
+            } catch { }
+        }
         return { success: false, error: error.message || 'Bilinmeyen hata' }
     } finally {
         if (browser) {
