@@ -183,18 +183,66 @@ async function downloadVideo() {
 
         console.log(`Downloading stream: ${streamUrl}`);
 
-        // Download in browser context
-        const videoBuffer = await page.evaluate(async (src) => {
-            const res = await fetch(src);
-            if (!res.ok) throw new Error('Fetch failed: ' + res.status);
-            const buf = await res.arrayBuffer();
-            return Array.from(new Uint8Array(buf));
-        }, streamUrl);
+        console.log(`Downloading stream: ${streamUrl}`);
 
-        fs.writeFileSync(outputPath, Buffer.from(videoBuffer));
+        // Get cookies from context to use in Node.js fetch
+        const cookies = await context.cookies();
+        const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+        // Use browser User-Agent
+        const userAgent = await page.evaluate(() => navigator.userAgent);
+
+        // Download in Node.js context (streaming) handles large files properly
+        // Check if fetch is available (Node 18+) or fallback to http/https
+        let response;
+        if (typeof fetch !== 'undefined') {
+            response = await fetch(streamUrl, {
+                headers: {
+                    'Cookie': cookieHeader,
+                    'User-Agent': userAgent,
+                    'Referer': 'https://www.youtube.com/',
+                    'Origin': 'https://www.youtube.com'
+                }
+            });
+
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+
+            // Create write stream
+            const fileStream = fs.createWriteStream(outputPath);
+
+            // Stream to file
+            // Node 18+ Web Streams to Node Streams
+            if (response.body) {
+                const { Readable } = require('stream');
+                // create readable stream from web stream
+                // @ts-ignore
+                const readableWebStream = Readable.fromWeb(response.body);
+
+                await new Promise((resolve, reject) => {
+                    readableWebStream.pipe(fileStream);
+                    readableWebStream.on('error', reject);
+                    fileStream.on('finish', resolve);
+                    fileStream.on('error', reject);
+                });
+            } else {
+                throw new Error('No response body');
+            }
+
+        } else {
+            // Fallback for older Node (though Next 14 uses Node 18+)
+            throw new Error('Node.js version too old, fetch API required');
+        }
+
+        await browser.close();
+        browser = null;
+
         const fileSize = fs.statSync(outputPath).size;
-
         console.log(`Download complete. Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+
+        // Check file validity locally if possible?
+        if (fileSize < 1000) {
+            throw new Error('Downloaded file is too small (<1KB)');
+        }
 
         // Output result as JSON for the parent process
         console.log(JSON.stringify({
@@ -211,10 +259,10 @@ async function downloadVideo() {
             success: false,
             error: error.message
         }));
-        process.exit(1);
-    } finally {
         if (browser) await browser.close();
+        process.exit(1);
     }
+}
 }
 
 downloadVideo();
