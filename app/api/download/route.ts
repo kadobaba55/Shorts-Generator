@@ -79,8 +79,12 @@ export async function POST(req: NextRequest) {
                 // NEW: Use Pure Playwright Downloader
                 console.log(`🚀 Starting Playwright-only download for: ${url}`)
 
+                // Determine cookie path
+                const cookiePath = path.join(process.cwd(), 'youtube-cookies.txt')
                 const scriptPath = path.join(process.cwd(), 'scripts', 'playwright-downloader.js')
-                const { stdout, stderr } = await execAsync(`node "${scriptPath}" "${url}"`, {
+
+                // Execute script with URL and Cookie Path
+                const { stdout, stderr } = await execAsync(`node "${scriptPath}" "${url}" "${cookiePath}"`, {
                     maxBuffer: 10 * 1024 * 1024, // 10MB buffer for logs
                     timeout: 120000 // 2 minutes timeout for extraction
                 })
