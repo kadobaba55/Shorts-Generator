@@ -44,7 +44,7 @@ export function saveCookies(cookiesContent: string): void {
 }
 
 /**
- * Download video using yt-dlp with cookies
+ * Download video using Playwright (primary) or yt-dlp (fallback)
  */
 export async function downloadWithCookies(
     url: string,
@@ -52,6 +52,24 @@ export async function downloadWithCookies(
     onProgress?: (progress: number, message: string) => void
 ): Promise<{ success: boolean; error?: string; title?: string; duration?: number }> {
 
+    // Try Playwright first (real browser - bypasses all bot detection)
+    try {
+        onProgress?.(5, 'Playwright ile indiriliyor...')
+
+        const { downloadWithPlaywright } = require('./playwrightDownloader')
+        const result = await downloadWithPlaywright(url, outputPath, onProgress)
+
+        if (result.success) {
+            console.log('✅ Playwright download successful')
+            return result
+        }
+
+        console.warn('⚠️ Playwright failed, trying yt-dlp fallback:', result.error)
+    } catch (playwrightError: any) {
+        console.warn('⚠️ Playwright error, trying yt-dlp fallback:', playwrightError.message)
+    }
+
+    // Fallback to yt-dlp with cookies
     if (!hasCookies()) {
         return { success: false, error: 'Cookie dosyası bulunamadı. Admin panelinden cookie yükleyin.' }
     }
@@ -62,7 +80,7 @@ export async function downloadWithCookies(
     }
 
     try {
-        onProgress?.(5, 'Video bilgisi alınıyor...')
+        onProgress?.(30, 'yt-dlp ile indiriliyor (fallback)...')
 
         // Get video info first
         const infoCmd = `yt-dlp --cookies "${COOKIES_PATH}" --dump-json "${url}"`
@@ -73,7 +91,7 @@ export async function downloadWithCookies(
         const duration = videoInfo.duration || 0
 
         console.log(`📹 Downloading: ${title} (${duration}s)`)
-        onProgress?.(10, `İndiriliyor: ${title.substring(0, 30)}...`)
+        onProgress?.(40, `İndiriliyor: ${title.substring(0, 30)}...`)
 
         // Download video
         const downloadCmd = `yt-dlp --cookies "${COOKIES_PATH}" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4 -o "${outputPath}" "${url}"`
@@ -104,10 +122,10 @@ export async function downloadWithCookies(
         // Check for specific error types
         const errorMsg = error.message || error.stderr || String(error)
 
-        if (errorMsg.includes('Sign in to confirm') || errorMsg.includes('bot')) {
+        if (errorMsg.includes('Sign in to confirm') || errorMsg.includes('bot') || errorMsg.includes('n challenge')) {
             return {
                 success: false,
-                error: 'Cookie\'ler geçersiz veya süresi dolmuş. Yeni cookie yükleyin.'
+                error: 'YouTube bot koruması aktif. Playwright kurulumu gerekli.'
             }
         }
 
