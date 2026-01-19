@@ -51,8 +51,12 @@ async function downloadVideo() {
         });
 
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            viewport: { width: 1280, height: 720 },
+            // Emulate iPad - Often forces standard MP4/HLS streams
+            userAgent: 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1',
+            viewport: { width: 810, height: 1080 },
+            deviceScaleFactor: 2,
+            isMobile: true,
+            hasTouch: true,
             locale: 'en-US',
             timezoneId: 'America/New_York'
         });
@@ -69,13 +73,6 @@ async function downloadVideo() {
         const page = await context.newPage();
         let streamUrl = null;
 
-        // Use Embed URL for simpler player and standard streams
-        const videoId = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)?.[1];
-        const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-
-        console.log(`Navigating to Embed URL: ${embedUrl}`);
-
-
         // Network Interception
         page.on('response', (response) => {
             const resUrl = response.url();
@@ -85,7 +82,7 @@ async function downloadVideo() {
                 // Ignore stats/logging calls
                 if (resUrl.includes('generate_204')) return;
 
-                // IGNORE UMP streams strictly now, trying to force MP4 from embed
+                // IGNORE UMP streams strictly
                 if (resUrl.includes('vnd.yt-ump')) return;
 
                 const headers = response.headers();
@@ -97,12 +94,9 @@ async function downloadVideo() {
 
                 if (streamUrl) return;
 
-                // Heuristic:
-                // 1. Content-type starts with video/
-                // 2. OR Content-length > 500KB
-
-                const isVideo = contentType.startsWith('video/');
-                const isLarge = contentLength && parseInt(contentLength) > 500000;
+                // Look for video/mp4
+                const isVideo = contentType.startsWith('video/') && !contentType.includes('application/vnd');
+                const isLarge = contentLength && parseInt(contentLength) > 1000000;
 
                 if (isVideo || isLarge) {
                     console.log('✅ Stream found:', resUrl);
@@ -111,32 +105,31 @@ async function downloadVideo() {
             }
         });
 
-        await page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        console.log(`Navigating to ${url}...`);
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Handle Popups (Embed usually has fewer)
+        // iPad Consent/Interactions
         try {
             await page.waitForTimeout(2000);
-            const consentSelectors = ['button[aria-label="Accept all"]', '.ytp-large-play-button'];
-            for (const selector of consentSelectors) {
+
+            // Try to click play if visible
+            const playSelectors = ['.ytp-large-play-button', '#player', 'button[aria-label="Play"]'];
+            for (const selector of playSelectors) {
                 if (await page.isVisible(selector)) {
                     await page.click(selector);
-                    await page.waitForTimeout(1000);
+                    console.log('Clicked play button');
+                    await page.waitForTimeout(500);
+                    break;
                 }
             }
-        } catch (e) { /* ignore */ }
 
-        // Trigger Playback (Embed)
-        try {
-            console.log('Interacting with embed player...');
-            const playButton = '.ytp-large-play-button';
-            if (await page.isVisible(playButton)) {
-                await page.click(playButton);
-            } else {
-                await page.click('body'); // Click anywhere to trigger autoplay policies
-            }
-        } catch (e) {
-            console.warn('Playback trigger warning:', e.message);
-        }
+            // Programmatic play fallback
+            await page.evaluate(() => {
+                const videos = document.querySelectorAll('video');
+                videos.forEach(v => { v.muted = true; v.play(); });
+            });
+
+        } catch (e) { /* ignore */ }
 
         // Wait for Stream
         let attempts = 0;
