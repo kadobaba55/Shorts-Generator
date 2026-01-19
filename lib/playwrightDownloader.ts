@@ -58,11 +58,19 @@ export async function downloadWithPlaywright(
 
         browser = await chromium.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled', // Try to hide automation
+                '--autoplay-policy=no-user-gesture-required'
+            ]
         })
 
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
+            locale: 'en-US',
+            timezoneId: 'America/New_York'
         })
 
         if (fs.existsSync(COOKIES_PATH)) {
@@ -80,9 +88,14 @@ export async function downloadWithPlaywright(
         let streamUrl: string | null = null
         page.on('response', (response) => {
             const url = response.url()
-            if (url.includes('videoplayback') && !streamUrl) {
-                const contentLength = response.headers()['content-length']
-                if (contentLength && parseInt(contentLength) > 1000000) { // > 1MB
+            // Check for video playback URLs (googlevideo.com usually)
+            if ((url.includes('videoplayback') || url.includes('.googlevideo.com/')) && !streamUrl) {
+                // Check content length if available, or just assume it's the stream if it's a video type
+                const headers = response.headers()
+                const contentLength = headers['content-length']
+                const contentType = headers['content-type']
+
+                if ((contentLength && parseInt(contentLength) > 1000000) || (contentType && contentType.includes('video'))) {
                     console.log('🎬 Found video stream:', url)
                     streamUrl = url
                 }
@@ -92,45 +105,72 @@ export async function downloadWithPlaywright(
         onProgress?.(10, 'YouTube sayfası açılıyor...')
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
-        // Handle consent popup
+        // Handle consent popup (Generic and YouTube specific)
         try {
             const consentSelectors = [
                 'button[aria-label="Accept all"]',
                 'button[aria-label="Reject all"]',
-                '.eom-button-row button'
+                '.eom-button-row button',
+                '#content .ytd-consent-bump-v2-lightbox button' // Example selector
             ]
             for (const selector of consentSelectors) {
                 if (await page.$(selector)) {
                     await page.click(selector)
-                    console.log('🍪 Consent popup handled')
+                    console.log('🍪 Consent popup handled via selector:', selector)
+                    await page.waitForTimeout(1000)
                     break
                 }
             }
         } catch (e) {
-            console.log('No consent popup found')
+            console.log('No consent popup found or error handling it')
         }
 
         onProgress?.(20, 'Video oynatılıyor...')
 
-        // Wait for video element and force play to trigger network request
-        await page.waitForSelector('video', { timeout: 30000 })
-        await page.evaluate(() => {
-            const video = document.querySelector('video')
-            if (video) {
-                video.muted = true
-                video.play()
-                video.currentTime = 5 // skip beginning
+        // Force playback interactions
+        try {
+            // Click "Play" if there's a large overlay button
+            const playButtonSelectors = ['.ytp-large-play-button', 'button[aria-label="Play"]']
+            for (const selector of playButtonSelectors) {
+                if (await page.isVisible(selector)) {
+                    await page.click(selector)
+                    console.log('▶️ Clicked play button:', selector)
+                    await page.waitForTimeout(500)
+                }
             }
-        })
+
+            // Programmatic play
+            await page.waitForSelector('video', { timeout: 10000 })
+            await page.evaluate(() => {
+                const video = document.querySelector('video')
+                if (video) {
+                    video.muted = true
+                    video.play().catch(e => console.error('Play error:', e))
+                    video.currentTime = 0
+                }
+            })
+        } catch (e) {
+            console.warn('⚠️ Could not force playback:', e)
+        }
 
         // Wait for network capture
+        onProgress?.(30, 'Akış bekleniyor...')
         let attempts = 0
-        while (!streamUrl && attempts < 20) {
+        while (!streamUrl && attempts < 30) { // Wait up to 15 seconds
             await new Promise(r => setTimeout(r, 500))
             attempts++
         }
 
-        // Get updated title
+        // Take debug screenshot if we failed or just for verification
+        const debugPath = path.join(process.cwd(), 'public', 'debug-playwright.png')
+        await page.screenshot({ path: debugPath, fullPage: false })
+        console.log('📸 Debug screenshot saved to:', debugPath)
+
+        if (!streamUrl) {
+            throw new Error('Video akışı yakalanamadı. Lütfen public/debug-playwright.png dosyasını kontrol edin.')
+        }
+
+        // Get updated title and duration
         const title = await page.evaluate(() => {
             return document.querySelector('h1.ytd-video-primary-info-renderer, h1.ytd-watch-metadata')?.textContent?.trim() || 'video'
         })
@@ -140,16 +180,14 @@ export async function downloadWithPlaywright(
             return video?.duration || 0
         })
 
-        if (!streamUrl) {
-            throw new Error('Video akışı yakalanamadı. Bot koruması veya ağ hatası.')
-        }
-
         onProgress?.(50, 'Video indiriliyor...')
         console.log(`Downloading from stream: ${streamUrl}`)
 
         // Download using the captured stream URL
+        // We use the page context to fetch so cookies/headers are preserved
         const videoBuffer = await page.evaluate(async (videoSrc) => {
             const response = await fetch(videoSrc)
+            if (!response.ok) throw new Error('Network fetch failed: ' + response.status)
             const buffer = await response.arrayBuffer()
             return Array.from(new Uint8Array(buffer))
         }, streamUrl)
@@ -162,21 +200,13 @@ export async function downloadWithPlaywright(
         console.log(`✅ Downloaded: ${(fileSize / 1024 / 1024).toFixed(2)} MB`)
 
         if (fileSize < 1000) {
-            return { success: false, error: 'İndirilen dosya çok küçük' }
+            return { success: false, error: 'İndirilen dosya çok küçük (<1KB)' }
         }
 
         return { success: true, title, duration, filePath: outputPath }
 
     } catch (error: any) {
         console.error('Playwright download error:', error)
-        // Screenshot for debug (saving to public to view if needed)
-        if (browser) {
-            try {
-                // const pages = await browser.pages() // pages() is not on browser, but on contexts.
-                // We don't have easy access to page object here in catch block if we lost reference.
-                // Resetting logic is complex here.
-            } catch { }
-        }
         return { success: false, error: error.message || 'Bilinmeyen hata' }
     } finally {
         if (browser) {
